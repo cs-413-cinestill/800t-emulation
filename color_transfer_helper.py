@@ -20,7 +20,8 @@ class ColorCheckerLocation:
 
     @staticmethod
     def build_from_pattern(pattern: np.ndarray) -> 'ColorCheckerLocation':
-        return ColorCheckerLocation((0, 0), (pattern.shape[1], 0), (0, pattern.shape[0]), (pattern.shape[1], pattern.shape[0]))
+        return ColorCheckerLocation((0, 0), (pattern.shape[1], 0), (0, pattern.shape[0]),
+                                    (pattern.shape[1], pattern.shape[0]))
 
     def to_np_array(self) -> np.ndarray:
         return np.float32((self.top_left, self.top_right, self.bottom_left, self.bottom_right))
