@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Tuple
 from functools import reduce
 import numpy as np
-
+import cv2
 
 @dataclass
 class ColorCheckerLocation:
@@ -89,3 +89,70 @@ class ColorChecker:
         return ColorCheckerLocation((0, 0), (pattern.shape[1], 0), (0, pattern.shape[0]),
                                     (pattern.shape[1], pattern.shape[0]))
 
+
+@dataclass
+class ColorCheckerReadings:
+    """
+    Stores the readings of a color checker in an image, namely the location of the patches in the image,
+    and the extracted patch color
+
+    Attributes:
+        color_checker: color checker pattern we are reading in the image
+        image: image we are extracting color checker patch information from
+        patch_data: (auto-calculation) the patch colors extracted from the image
+    """
+    color_checker: ColorChecker
+    image: np.ndarray
+    _color_checker_location: ColorCheckerLocation = None
+    patch_data: np.ndarray = None
+
+    def __post_init__(self):
+        self._color_checker_location = ColorCheckerLocation()
+
+    def _compute_patches_if_ready(self) -> None:
+        if self._color_checker_location.is_initialized():
+            self.patch_data = self._extract_patch_data()
+        
+    def _extract_patch_data(self) -> np.ndarray:
+        pass
+
+    def assign_top_left(self, x, y) -> None:
+        """
+        assigns the location of the top left corner of the color checker in the image.
+        May trigger extraction of patch from image of all other corners of color checker have been given
+        :param x: the x coordinate of the pixel of the top left corner of the color checker in the image
+        :param y: the y coordinate of the pixel of the top left corner of the color checker in the image
+        """
+        self._color_checker_location.top_left = (x, y)
+        self._compute_patches_if_ready()
+
+    def assign_top_right(self, x, y) -> None:
+        """
+        assigns the location of the top right corner of the color checker in the image.
+        May trigger extraction of patch from image of all other corners of color checker have been given
+        :param x: the x coordinate of the pixel of the top right corner of the color checker in the image
+        :param y: the y coordinate of the pixel of the top right corner of the color checker in the image
+        """
+        self._color_checker_location.top_right = (x, y)
+        self._compute_patches_if_ready()
+
+
+    def assign_bottom_left(self, x, y) -> None:
+        """
+        assigns the location of the bottom left corner of the color checker in the image.
+        May trigger extraction of patch from image of all other corners of color checker have been given
+        :param x: the x coordinate of the pixel of the bottom left corner of the color checker in the image
+        :param y: the y coordinate of the pixel of the bottom left corner of the color checker in the image
+        """
+        self._color_checker_location.bottom_left = (x, y)
+        self._compute_patches_if_ready()
+
+    def assign_bottom_right(self, x, y) -> None:
+        """
+        assigns the location of the bottom right corner of the color checker in the image.
+        May trigger extraction of patch from image of all other corners of color checker have been given
+        :param x: the x coordinate of the pixel of the bottom right corner of the color checker in the image
+        :param y: the y coordinate of the pixel of the bottom right corner of the color checker in the image
+        """
+        self._color_checker_location.bottom_right = (x, y)
+        self._compute_patches_if_ready()
