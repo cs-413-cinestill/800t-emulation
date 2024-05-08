@@ -4,6 +4,7 @@ from functools import reduce
 import numpy as np
 import cv2
 
+
 @dataclass
 class ColorCheckerLocation:
     """
@@ -99,22 +100,56 @@ class ColorCheckerReadings:
     Attributes:
         color_checker: color checker pattern we are reading in the image
         image: image we are extracting color checker patch information from
-        patch_data: (auto-calculation) the patch colors extracted from the image
+        patch_location_info: (auto-calculated) a 2D numpy array
+            assigning the patch index to each pixel of image
+        patch_data: (auto-calculated) the patch colors extracted from the image
     """
     color_checker: ColorChecker
     image: np.ndarray
     _color_checker_location: ColorCheckerLocation = None
+    """
+    locates to color checker pattern in image
+    """
+    patch_location_info: np.ndarray = None
     patch_data: np.ndarray = None
+
+    @staticmethod
+    def _pad_to_image(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
+        """
+        add 0 value padding to a source image in order to have the dimensions of dst,
+        or its own dimension if the source is larger than the destination for any given axis
+        :param src: the source image to pad
+        :param dst: the destination image to use as minimum final size
+        :return: a possibly padded source image
+        """
+        final_shape = max(src.shape[0], dst.shape[0]), max(src.shape[1], dst.shape[1])
+        padded = np.zeros(final_shape, dtype='uint8')
+        padded[:src.shape[0], :src.shape[1]] = src
+        return padded
 
     def __post_init__(self):
         self._color_checker_location = ColorCheckerLocation()
 
     def _compute_patches_if_ready(self) -> None:
         if self._color_checker_location.is_initialized():
-            self.patch_data = self._extract_patch_data()
-        
-    def _extract_patch_data(self) -> np.ndarray:
-        pass
+            self._calculate_patch_location()
+            number_patches = int(self.color_checker.num_cols * self.color_checker.num_rows)  # todo error handling if trying to do mean of no pixels
+            extracted_colors = [
+                np.mean(self.image[self.patch_location_info == i + 1], axis=0)
+                for i in range(number_patches)
+            ]
+            self.patch_data = np.expand_dims(np.array(extracted_colors), 1)
+
+
+    def _calculate_patch_location(self) -> None:
+        transformation = cv2.getPerspectiveTransform(self.color_checker.get_corner_location().to_np_array(),
+                                                     self._color_checker_location.to_np_array()
+                                        )
+        self.patch_location_info = cv2.warpPerspective(
+            self._pad_to_image(self.color_checker.np_array, self.image),
+            transformation,
+            (self.image.shape[1], self.image.shape[0])
+        )
 
     def assign_top_left(self, x, y) -> None:
         """
@@ -136,7 +171,6 @@ class ColorCheckerReadings:
         self._color_checker_location.top_right = (x, y)
         self._compute_patches_if_ready()
 
-
     def assign_bottom_left(self, x, y) -> None:
         """
         assigns the location of the bottom left corner of the color checker in the image.
@@ -156,3 +190,4 @@ class ColorCheckerReadings:
         """
         self._color_checker_location.bottom_right = (x, y)
         self._compute_patches_if_ready()
+
