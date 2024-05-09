@@ -15,11 +15,19 @@ class ColorCheckerLocation:
     bottom_left: Tuple[int, int] = None
     bottom_right: Tuple[int, int] = None
 
-    def is_initialized(self):
+    def is_initialized(self) -> bool:
+        """
+        checks if all corners are initialized
+        :return: true if all corners are initialized, false otherwise
+        """
         return self.top_left is not None and self.top_right is not None \
             and self.bottom_left is not None and self.bottom_right is not None
 
     def to_np_array(self) -> np.ndarray:
+        """
+        output a (4,2) numpy array with the coordinates of the corners
+        :return:
+        """
         return np.float32((self.top_left, self.top_right, self.bottom_left, self.bottom_right))
 
     def __repr__(self):
@@ -86,6 +94,10 @@ class ColorChecker:
         return color_checker
 
     def get_corner_location(self) -> ColorCheckerLocation:
+        """
+        get the coordinates of the corners of the color chart in its np array visualization
+        :return: a ColorCheckerLocation object with the coordinates
+        """
         pattern = self.np_array
         return ColorCheckerLocation((0, 0), (pattern.shape[1], 0), (0, pattern.shape[0]),
                                     (pattern.shape[1], pattern.shape[0]))
@@ -138,7 +150,7 @@ class ColorCheckerReadings:
                 np.mean(self.image[self.patch_location_info == i + 1], axis=0)
                 for i in range(number_patches)
             ]
-            self.patch_data = np.expand_dims(np.array(extracted_colors), 1)
+            self.patch_data = np.array(extracted_colors)
 
 
     def _calculate_patch_location(self) -> None:
