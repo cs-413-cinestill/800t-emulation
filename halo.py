@@ -179,11 +179,11 @@ def main(input_image_path, output_image_path):
                 print(f" {toc - tic:0.4f} seconds")
                 break
         else:
-            continue  # only executed if the inner loop did NOT break
-        break  # only executed if the inner loop DID break
+            continue 
+        break  
 
 
-    # Save the processed image
+   
     cv2.imwrite(output_image_path, output_image)
 
 
