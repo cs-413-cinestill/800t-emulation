@@ -2,38 +2,22 @@ import random
 import time
 import math
 import numpy as np
+from tqdm import tqdm
 from PIL import Image
-from multiprocessing import Pool
-from numba import jit
+from numba import njit, prange
 
 MAX_CHANNELS = 3
+PIXEL_WISE = 0
+GRAIN_WISE = 1
 MAX_GREY_LEVEL = 255
 EPSILON_GREY_LEVEL = 0.1
 
 # arguments of the algorithm
-file_name_in = "data/digital/test_image.jpeg"
-file_name_out = "image_test_out.jpeg"
+file_name_in = "data/small.png"
+file_name_out = "data/small_out2.png"
+fake_file_name_in = "data/tiny.png"
 
-mu_r = 0.025
-sigma_r = 0.0
-sigma_filter = 0.8
-n_monte_carlo = 5
-zoom = 1.0
-grain_seed = random.randint(0, 1000)
-
-height_in = 0
-width_in = 0
-height_out = 0
-width_out = 0
-
-
-# Square distance
-def sq_distance(x1, y1, x2, y2):
-    p = [x1, y1]
-    q = [x2, y2]
-    return math.dist(p, q) ** 2
-
-
+@njit
 def cell_seed(x, y, offset):
     period = 2 ** 16
     seed = ((y % period) * period + (x % period)) + offset
@@ -41,15 +25,14 @@ def cell_seed(x, y, offset):
         return 1
     return seed % (2 ** 32)
 
-
 # Render one pixel in the pixel-wise algorithm
-def render_pixel(chan_in, chan_out, y_out, x_out, lambda_list, exp_lambda_list, x_gaussian_list, y_gaussian_list):
-#    chan_in, chan_out, y_out, x_out, lambda_list, exp_lambda_list, x_gaussian_list, y_gaussian_list = args
-
+@njit
+def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_out, offset, n_monte_carlo, grain_radius,
+                 sigma_r, sigma_filter, lambda_list, exp_lambda_list, x_gaussian_list, y_gaussian_list):
     normal_quantile = 3.0902
-    max_radius = mu_r
+    max_radius = grain_radius
 
-    ag = 1 / math.ceil(1 / mu_r)
+    ag = 1 / math.ceil(1 / grain_radius)
     zoom_x = (width_out - 1) / (width_in - 1)
     zoom_y = (height_out - 1) / (height_in - 1)
 
@@ -60,11 +43,11 @@ def render_pixel(chan_in, chan_out, y_out, x_out, lambda_list, exp_lambda_list, 
 
     mu = 0.0
     sigma = 0.0
-    if sigma_r > 0.0:
-        sigma = math.sqrt(math.log((sigma_r / mu_r) ** 2 + 1.0))
-        mu = math.log(mu_r) - sigma ** 2 / 2.0
-        log_normal_quantile = math.exp(mu + sigma * normal_quantile)
-        max_radius = log_normal_quantile
+    # if sigma_r > 0.0:
+    #     sigma = math.sqrt(math.log((sigma_r / grain_radius) ** 2 + 1.0))
+    #     mu = math.log(grain_radius) - sigma ** 2 / 2.0
+    #     log_normal_quantile = math.exp(mu + sigma * normal_quantile)
+    #     max_radius = log_normal_quantile
 
     for i in range(n_monte_carlo):
         x_gaussian = x_in + sigma_filter * x_gaussian_list[i] / zoom_x
@@ -85,10 +68,10 @@ def render_pixel(chan_in, chan_out, y_out, x_out, lambda_list, exp_lambda_list, 
                 cell_corner_x = ag * ncx
                 cell_corner_y = ag * ncy
 
-                seed = cell_seed(ncx, ncy, grain_seed)
+                seed = cell_seed(ncx, ncy, offset)
                 np.random.seed(seed)
 
-                u = chan_in[min(max(math.floor(cell_corner_y), 0), height_in - 1)][min(max(
+                u = img_in[min(max(math.floor(cell_corner_y), 0), height_in - 1)][min(max(
                     math.floor(cell_corner_x), 0), width_in - 1)]
                 u_ind = int(math.floor(u * MAX_GREY_LEVEL))
                 curr_lambda = lambda_list[u_ind]
@@ -99,28 +82,24 @@ def render_pixel(chan_in, chan_out, y_out, x_out, lambda_list, exp_lambda_list, 
                     x_centre_grain = cell_corner_x + ag * np.random.uniform()
                     y_centre_grain = cell_corner_y + ag * np.random.uniform()
 
-                    if sigma_r > 0.0:
-                        curr_radius = min(math.exp(mu + sigma * np.random.normal()), max_radius)
-                        curr_grain_radius_sq = curr_radius ** 2
-                    elif sigma_r == 0.0:
-                        curr_grain_radius_sq = mu_r ** 2
-                    else:
-                        print("Error, the standard deviation of the grain should be positive.")
-                        return
+                    # if sigma_r > 0.0:
+                    #     curr_radius = min(math.exp(mu + sigma * np.random.normal()), max_radius)
+                    #     curr_grain_radius_sq = curr_radius ** 2
+                    # elif sigma_r == 0.0:
+                    curr_grain_radius_sq = grain_radius ** 2
+                    # else:
+                    #     print("Error, the standard deviation of the grain should be positive.")
+                    #     return
 
-                    if sq_distance(x_centre_grain, y_centre_grain, x_gaussian, y_gaussian) < curr_grain_radius_sq:
+                    if np.linalg.norm(np.array([x_centre_grain-x_gaussian,y_centre_grain-y_gaussian])) < grain_radius:
                         pix_out += 1.0
                         pt_covered = True
                         break
-
-    return y_out, x_out, pix_out / n_monte_carlo
-
+    return pix_out / n_monte_carlo
 
 # Pixel-wise film grain rendering algorithm
-@jit
-def film_grain_rendering_pixel_wise(chan_in):
-    np.random.seed()
-
+@njit(parallel=True)
+def film_grain_rendering_pixel_wise(img_in, grain_radius, grain_std, sigma_filter, n_monte_carlo, height_out, width_out, grain_seed):
     x_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
     y_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
 
@@ -128,35 +107,31 @@ def film_grain_rendering_pixel_wise(chan_in):
     exp_lambda_list = np.zeros(MAX_GREY_LEVEL)
     for i in range(MAX_GREY_LEVEL):
         u = i / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
-        ag = 1 / math.ceil(1 / mu_r)
-        lambda_temp = -(ag ** 2 / (math.pi * (mu_r ** 2 + sigma_r ** 2))) * math.log(1.0 - u)
+        ag = 1 / math.ceil(1 / grain_radius)
+        lambda_temp = -(ag ** 2 / (math.pi * (grain_radius ** 2 + grain_std ** 2))) * math.log(1.0 - u)
         lambda_list[i] = lambda_temp
         exp_lambda_list[i] = math.exp(-lambda_temp)
 
-    chan_out = np.zeros((height_out, width_out))
+    img_out = np.zeros((height_out, width_out))
 
-    # Prepare arguments for multiprocessing
-    args_list = [(chan_in, chan_out, i, j, lambda_list, exp_lambda_list, x_gaussian_list, y_gaussian_list)
-                 for i in range(img_out.shape[0]) for j in range(img_out.shape[1])]
+    for i in prange(img_out.shape[0]):
+        for j in prange(img_out.shape[1]):
+            pix = render_pixel(img_in, i, j, img_in.shape[0], img_in.shape[1], img_out.shape[0], img_out.shape[1],
+                               grain_seed, n_monte_carlo, grain_radius, grain_std, sigma_filter,
+                               lambda_list, exp_lambda_list, x_gaussian_list, y_gaussian_list)
+            img_out[i, j] = pix
 
-    # Create a multiprocessing pool
-#    with Pool() as pool:
-#        results = pool.map(render_pixel, args_list)
-
-#    for i, j, value in results:
-#        chan_out[i][j] = value
-
-    for i in range(height_out):
-        for j in range(width_out):
-            _, _, chan_out[i,j] = render_pixel(chan_in, chan_out, i, j, lambda_list, exp_lambda_list, x_gaussian_list, y_gaussian_list)
-
-    return chan_out
+    return img_out
 
 
 if __name__ == '__main__':
     image_in = Image.open(file_name_in)
     img_in = np.asarray(image_in)
     img_in = img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)  # normalize the image array
+
+    fake_img = Image.open(fake_file_name_in)
+    fake_img_in = np.asarray(image_in)
+    fake_img_in = fake_img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
 
     zoom = 1.0
 
@@ -165,11 +140,25 @@ if __name__ == '__main__':
     height_out = int(zoom * height_in)
     width_out = int(zoom * width_in)
 
-    # Time and carry out grain rendering
-    start = time.time()
+    mu_r = 0.025
+    sigma_r = 0.0
+    sigma_filter = 0.8
+    n_monte_carlo = 5
+    algorithm_id = 0
 
+    # Time and carry out grain rendering
+
+
+    print("_____________________")
+    print("Starting fake colour channel")
+    print("_____________________")
+    img_in_temp = fake_img_in[:, :, 0]
+
+    # Carry out film grain synthesis
+    film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo, 2, 2, random.randint(0, 1000))
     img_out = np.zeros((height_out, width_out, MAX_CHANNELS), dtype=np.uint8)
 
+    start = time.time()
     for colourChannel in range(MAX_CHANNELS):
         print("_____________________")
         print("Starting colour channel", colourChannel)
@@ -177,10 +166,7 @@ if __name__ == '__main__':
         img_in_temp = img_in[:, :, colourChannel]
 
         # Carry out film grain synthesis
-        np.random.seed(1)
-        grain_seed = np.random.randint(0, 2**31 - 1)
-
-        img_out_temp = film_grain_rendering_pixel_wise(img_in_temp)
+        img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo, height_out, width_out, random.randint(0, 1000))
         img_out_temp *= (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
         img_out[:, :, colourChannel] = img_out_temp
 
