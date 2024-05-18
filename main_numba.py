@@ -15,7 +15,6 @@ EPSILON_GREY_LEVEL = 0.1
 # arguments of the algorithm
 file_name_in = "data/small.png"
 file_name_out = "data/small_out2.png"
-fake_file_name_in = "data/tiny.png"
 
 @njit
 def cell_seed(x, y, offset):
@@ -129,8 +128,7 @@ if __name__ == '__main__':
     img_in = np.asarray(image_in)
     img_in = img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)  # normalize the image array
 
-    fake_img = Image.open(fake_file_name_in)
-    fake_img_in = np.asarray(image_in)
+    fake_img_in = np.zeros((2,2,3))
     fake_img_in = fake_img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
 
     zoom = 1.0
@@ -166,7 +164,8 @@ if __name__ == '__main__':
         img_in_temp = img_in[:, :, colourChannel]
 
         # Carry out film grain synthesis
-        img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo, height_out, width_out, random.randint(0, 1000))
+        img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo,
+                                                       height_out, width_out, random.randint(0, 1000))
         img_out_temp *= (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
         img_out[:, :, colourChannel] = img_out_temp
 
