@@ -2,7 +2,6 @@ import random
 import time
 import math
 import numpy as np
-from tqdm import tqdm
 from PIL import Image
 from numba import njit, prange
 from numba_progress import ProgressBar
@@ -15,7 +14,7 @@ EPSILON_GREY_LEVEL = 0.1
 
 # arguments of the algorithm
 file_name_in = "data/small.png"
-file_name_out = "data/test_small.png"
+file_name_out = "data/test_small_modified_algo.png"
 
 
 @njit
@@ -102,18 +101,9 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_ou
 # Pixel-wise film grain rendering algorithm
 @njit(parallel=True)
 def film_grain_rendering_pixel_wise(img_in, grain_radius, grain_std, sigma_filter, n_monte_carlo, height_out, width_out,
-                                    grain_seed, progress_proxy):
+                                    grain_seed, progress_proxy, lambda_list, exp_lambda_list):
     x_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
     y_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
-
-    lambda_list = np.zeros(MAX_GREY_LEVEL)
-    exp_lambda_list = np.zeros(MAX_GREY_LEVEL)
-    for i in range(MAX_GREY_LEVEL):
-        u = i / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
-        ag = 1 / math.ceil(1 / grain_radius)
-        lambda_temp = -(ag ** 2 / (math.pi * (grain_radius ** 2 + grain_std ** 2))) * math.log(1.0 - u)
-        lambda_list[i] = lambda_temp
-        exp_lambda_list[i] = math.exp(-lambda_temp)
 
     img_out = np.zeros((height_out, width_out))
 
@@ -143,17 +133,21 @@ if __name__ == '__main__':
     mu_r = 0.025
     sigma_r = 0.0
     sigma_filter = 0.8
-    n_monte_carlo = 5
-    algorithm_id = 0
+    n_monte_carlo = 100
+
+    ag = 1 / math.ceil(1 / mu_r)
+    possible_values = np.arange(MAX_GREY_LEVEL) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
+    lambdas = -(ag ** 2 / (np.pi * (mu_r ** 2 + sigma_r ** 2))) * np.log(1.0 - possible_values)
+    lambda_exps = np.exp(-lambdas)
 
     print("_____________________")
     print("trigger function compilation")
     print("_____________________")
-    img_in_temp = np.zeros((2, 2, 3))[:, :, 0]  # cannot remove slicing or runs much slower
+    img_in_temp = np.zeros((2, 2, 3))[:, :, 0]  # cannot remove slicing or runs much slower at start of color channel 0
     # trigger function compilation
     with ProgressBar(total=2) as progress:
         film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo, 2, 2,
-                                        random.randint(0, 1000), progress)
+                                        random.randint(0, 1000), progress, lambdas, lambda_exps)
 
     # Carry out film grain synthesis
     img_out = np.zeros((height_out, width_out, MAX_CHANNELS), dtype=np.uint8)
@@ -169,7 +163,8 @@ if __name__ == '__main__':
         img_out_temp = []
         with ProgressBar(total=img_in.shape[0]) as progress:
             img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo,
-                                                           height_out, width_out, random.randint(0, 1000), progress)
+                                                           height_out, width_out, random.randint(0, 1000),
+                                                           progress, lambdas, lambda_exps)
         img_out_temp *= (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
         img_out[:, :, colourChannel] = img_out_temp
 
