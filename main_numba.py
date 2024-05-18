@@ -5,6 +5,7 @@ import numpy as np
 from tqdm import tqdm
 from PIL import Image
 from numba import njit, prange
+from numba_progress import ProgressBar
 
 MAX_CHANNELS = 3
 PIXEL_WISE = 0
@@ -14,7 +15,8 @@ EPSILON_GREY_LEVEL = 0.1
 
 # arguments of the algorithm
 file_name_in = "data/small.png"
-file_name_out = "data/small_out3.png"
+file_name_out = "data/test_small.png"
+
 
 @njit
 def cell_seed(x, y, offset):
@@ -23,6 +25,7 @@ def cell_seed(x, y, offset):
     if seed == 0:
         return 1
     return seed % (2 ** 32)
+
 
 # Render one pixel in the pixel-wise algorithm
 @njit
@@ -85,20 +88,21 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_ou
                     #     curr_radius = min(math.exp(mu + sigma * np.random.normal()), max_radius)
                     #     curr_grain_radius_sq = curr_radius ** 2
                     # elif sigma_r == 0.0:
-                    curr_grain_radius_sq = grain_radius
                     # else:
                     #     print("Error, the standard deviation of the grain should be positive.")
                     #     return
 
-                    if (x_centre_grain-x_gaussian)**2+(y_centre_grain-y_gaussian)**2 < grain_radius**2:
+                    if (x_centre_grain - x_gaussian) ** 2 + (y_centre_grain - y_gaussian) ** 2 < grain_radius ** 2:
                         pix_out += 1.0
                         pt_covered = True
                         break
     return pix_out / n_monte_carlo
 
+
 # Pixel-wise film grain rendering algorithm
 @njit(parallel=True)
-def film_grain_rendering_pixel_wise(img_in, grain_radius, grain_std, sigma_filter, n_monte_carlo, height_out, width_out, grain_seed):
+def film_grain_rendering_pixel_wise(img_in, grain_radius, grain_std, sigma_filter, n_monte_carlo, height_out, width_out,
+                                    grain_seed, progress_proxy):
     x_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
     y_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
 
@@ -119,6 +123,7 @@ def film_grain_rendering_pixel_wise(img_in, grain_radius, grain_std, sigma_filte
                                grain_seed, n_monte_carlo, grain_radius, grain_std, sigma_filter,
                                lambda_list, exp_lambda_list, x_gaussian_list, y_gaussian_list)
             img_out[i, j] = pix
+        progress_proxy.update(1)
 
     return img_out
 
@@ -144,9 +149,11 @@ if __name__ == '__main__':
     print("_____________________")
     print("trigger function compilation")
     print("_____________________")
-    img_in_temp = np.zeros((2,2,3))[:, :, 0] # cannot remove slicing or runs much slower
+    img_in_temp = np.zeros((2, 2, 3))[:, :, 0]  # cannot remove slicing or runs much slower
     # trigger function compilation
-    film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo, 2, 2, random.randint(0, 1000))
+    with ProgressBar(total=2) as progress:
+        film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo, 2, 2,
+                                        random.randint(0, 1000), progress)
 
     # Carry out film grain synthesis
     img_out = np.zeros((height_out, width_out, MAX_CHANNELS), dtype=np.uint8)
@@ -159,8 +166,10 @@ if __name__ == '__main__':
         img_in_temp = img_in[:, :, colourChannel]
 
         # Carry out film grain synthesis
-        img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo,
-                                                       height_out, width_out, random.randint(0, 1000))
+        img_out_temp = []
+        with ProgressBar(total=img_in.shape[0]) as progress:
+            img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo,
+                                                           height_out, width_out, random.randint(0, 1000), progress)
         img_out_temp *= (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
         img_out[:, :, colourChannel] = img_out_temp
 
