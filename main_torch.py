@@ -4,6 +4,7 @@ import math
 import numpy as np
 from tqdm import tqdm
 from PIL import Image
+from numba import njit
 
 MAX_CHANNELS = 3
 PIXEL_WISE = 0
@@ -12,15 +13,10 @@ MAX_GREY_LEVEL = 255
 EPSILON_GREY_LEVEL = 0.1
 
 # arguments of the algorithm
-file_name_in = "data/digital/small.png"
-file_name_out = "data/small_out.png"
+file_name_in = "data/small.png"
+file_name_out = "data/small_out2.png"
 
-# Square distance
-def sq_distance(x1, y1, x2, y2):
-    p = [x1, y1]
-    q = [x2, y2]
-    return math.dist(p, q) ** 2
-
+@njit
 def cell_seed(x, y, offset):
     period = 2 ** 16
     seed = ((y % period) * period + (x % period)) + offset
@@ -29,6 +25,7 @@ def cell_seed(x, y, offset):
     return seed % (2 ** 32)
 
 # Render one pixel in the pixel-wise algorithm
+@njit(parallel=True)
 def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_out, offset, n_monte_carlo, grain_radius,
                  sigma_r, sigma_filter, lambda_list, exp_lambda_list, x_gaussian_list, y_gaussian_list):
     normal_quantile = 3.0902
@@ -45,11 +42,11 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_ou
 
     mu = 0.0
     sigma = 0.0
-    if sigma_r > 0.0:
-        sigma = math.sqrt(math.log((sigma_r / grain_radius) ** 2 + 1.0))
-        mu = math.log(grain_radius) - sigma ** 2 / 2.0
-        log_normal_quantile = math.exp(mu + sigma * normal_quantile)
-        max_radius = log_normal_quantile
+    # if sigma_r > 0.0:
+    #     sigma = math.sqrt(math.log((sigma_r / grain_radius) ** 2 + 1.0))
+    #     mu = math.log(grain_radius) - sigma ** 2 / 2.0
+    #     log_normal_quantile = math.exp(mu + sigma * normal_quantile)
+    #     max_radius = log_normal_quantile
 
     for i in range(n_monte_carlo):
         x_gaussian = x_in + sigma_filter * x_gaussian_list[i] / zoom_x
@@ -84,16 +81,16 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_ou
                     x_centre_grain = cell_corner_x + ag * np.random.uniform()
                     y_centre_grain = cell_corner_y + ag * np.random.uniform()
 
-                    if sigma_r > 0.0:
-                        curr_radius = min(math.exp(mu + sigma * np.random.normal()), max_radius)
-                        curr_grain_radius_sq = curr_radius ** 2
-                    elif sigma_r == 0.0:
-                        curr_grain_radius_sq = grain_radius ** 2
-                    else:
-                        print("Error, the standard deviation of the grain should be positive.")
-                        return
+                    # if sigma_r > 0.0:
+                    #     curr_radius = min(math.exp(mu + sigma * np.random.normal()), max_radius)
+                    #     curr_grain_radius_sq = curr_radius ** 2
+                    # elif sigma_r == 0.0:
+                    curr_grain_radius_sq = grain_radius ** 2
+                    # else:
+                    #     print("Error, the standard deviation of the grain should be positive.")
+                    #     return
 
-                    if sq_distance(x_centre_grain, y_centre_grain, x_gaussian, y_gaussian) < curr_grain_radius_sq:
+                    if np.linalg.norm(np.array([x_centre_grain-x_gaussian,y_centre_grain-y_gaussian])) < grain_radius:
                         pix_out += 1.0
                         pt_covered = True
                         break
