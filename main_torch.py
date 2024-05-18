@@ -4,7 +4,7 @@ import math
 import numpy as np
 from tqdm import tqdm
 from PIL import Image
-from numba import njit
+from numba import njit, prange
 
 MAX_CHANNELS = 3
 PIXEL_WISE = 0
@@ -15,6 +15,7 @@ EPSILON_GREY_LEVEL = 0.1
 # arguments of the algorithm
 file_name_in = "data/small.png"
 file_name_out = "data/small_out2.png"
+fake_file_name_in = "data/tiny.png"
 
 @njit
 def cell_seed(x, y, offset):
@@ -25,7 +26,7 @@ def cell_seed(x, y, offset):
     return seed % (2 ** 32)
 
 # Render one pixel in the pixel-wise algorithm
-@njit(parallel=True)
+@njit
 def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_out, offset, n_monte_carlo, grain_radius,
                  sigma_r, sigma_filter, lambda_list, exp_lambda_list, x_gaussian_list, y_gaussian_list):
     normal_quantile = 3.0902
@@ -97,15 +98,8 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_ou
     return pix_out / n_monte_carlo
 
 # Pixel-wise film grain rendering algorithm
-def film_grain_rendering_pixel_wise(img_in, film_grain_options):
-    grain_radius = film_grain_options["mu_r"]
-    grain_std = film_grain_options["sigma_r"]
-    sigma_filter = film_grain_options["sigma_filter"]
-
-    n_monte_carlo = film_grain_options["n_monte_carlo"]
-
-    np.random.seed()
-
+@njit(parallel=True)
+def film_grain_rendering_pixel_wise(img_in, grain_radius, grain_std, sigma_filter, n_monte_carlo, height_out, width_out, grain_seed):
     x_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
     y_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
 
@@ -118,12 +112,12 @@ def film_grain_rendering_pixel_wise(img_in, film_grain_options):
         lambda_list[i] = lambda_temp
         exp_lambda_list[i] = math.exp(-lambda_temp)
 
-    img_out = np.zeros((film_grain_options["height_out"], film_grain_options["width_out"]))
+    img_out = np.zeros((height_out, width_out))
 
-    for i in tqdm(range(img_out.shape[0])):
-        for j in tqdm(range(img_out.shape[1]), leave=False):
+    for i in prange(img_out.shape[0]):
+        for j in prange(img_out.shape[1]):
             pix = render_pixel(img_in, i, j, img_in.shape[0], img_in.shape[1], img_out.shape[0], img_out.shape[1],
-                               film_grain_options["grain_seed"], n_monte_carlo, grain_radius, grain_std, sigma_filter,
+                               grain_seed, n_monte_carlo, grain_radius, grain_std, sigma_filter,
                                lambda_list, exp_lambda_list, x_gaussian_list, y_gaussian_list)
             img_out[i, j] = pix
 
@@ -134,6 +128,10 @@ if __name__ == '__main__':
     image_in = Image.open(file_name_in)
     img_in = np.asarray(image_in)
     img_in = img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)  # normalize the image array
+
+    fake_img = Image.open(fake_file_name_in)
+    fake_img_in = np.asarray(image_in)
+    fake_img_in = fake_img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
 
     zoom = 1.0
 
@@ -148,23 +146,19 @@ if __name__ == '__main__':
     n_monte_carlo = 5
     algorithm_id = 0
 
-    film_grain_params = {
-        "mu_r": mu_r,
-        "sigma_r": sigma_r,
-        "zoom": zoom,
-        "sigma_filter": sigma_filter,
-        "n_monte_carlo": n_monte_carlo,
-        "algorithm_id": algorithm_id,
-        "height_out": height_out,
-        "width_out": width_out,
-        "grain_seed": random.randint(0, 1000)
-    }
-
     # Time and carry out grain rendering
-    start = time.time()
 
+
+    print("_____________________")
+    print("Starting fake colour channel")
+    print("_____________________")
+    img_in_temp = fake_img_in[:, :, 0]
+
+    # Carry out film grain synthesis
+    film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo, 2, 2, random.randint(0, 1000))
     img_out = np.zeros((height_out, width_out, MAX_CHANNELS), dtype=np.uint8)
 
+    start = time.time()
     for colourChannel in range(MAX_CHANNELS):
         print("_____________________")
         print("Starting colour channel", colourChannel)
@@ -172,9 +166,7 @@ if __name__ == '__main__':
         img_in_temp = img_in[:, :, colourChannel]
 
         # Carry out film grain synthesis
-        np.random.seed(1)
-        film_grain_params["grainSeed"] = np.random.randint(0, 2**31 - 1)
-        img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, film_grain_params)
+        img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo, height_out, width_out, random.randint(0, 1000))
         img_out_temp *= (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
         img_out[:, :, colourChannel] = img_out_temp
 
