@@ -86,12 +86,12 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_ou
                     #     curr_radius = min(math.exp(mu + sigma * np.random.normal()), max_radius)
                     #     curr_grain_radius_sq = curr_radius ** 2
                     # elif sigma_r == 0.0:
-                    curr_grain_radius_sq = grain_radius ** 2
+                    curr_grain_radius_sq = grain_radius
                     # else:
                     #     print("Error, the standard deviation of the grain should be positive.")
                     #     return
 
-                    if np.linalg.norm(np.array([x_centre_grain-x_gaussian,y_centre_grain-y_gaussian])) < grain_radius:
+                    if (x_centre_grain-x_gaussian)**2+(y_centre_grain-y_gaussian)**2 < grain_radius**2:
                         pix_out += 1.0
                         pt_covered = True
                         break
