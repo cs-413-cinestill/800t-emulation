@@ -14,7 +14,7 @@ EPSILON_GREY_LEVEL = 0.1
 
 # arguments of the algorithm
 file_name_in = "data/small.png"
-file_name_out = "data/small_out2.png"
+file_name_out = "data/small_out3.png"
 
 @njit
 def cell_seed(x, y, offset):
@@ -128,9 +128,6 @@ if __name__ == '__main__':
     img_in = np.asarray(image_in)
     img_in = img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)  # normalize the image array
 
-    fake_img_in = np.zeros((2,2,3))
-    fake_img_in = fake_img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
-
     zoom = 1.0
 
     width_in = image_in.width
@@ -144,18 +141,16 @@ if __name__ == '__main__':
     n_monte_carlo = 5
     algorithm_id = 0
 
-    # Time and carry out grain rendering
-
-
     print("_____________________")
-    print("Starting fake colour channel")
+    print("trigger function compilation")
     print("_____________________")
-    img_in_temp = fake_img_in[:, :, 0]
+    img_in_temp = np.zeros((2,2,3))[:, :, 0] # cannot remove slicing or runs much slower
+    # trigger function compilation
+    film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo, 2, 2, random.randint(0, 1000))
 
     # Carry out film grain synthesis
-    film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo, 2, 2, random.randint(0, 1000))
     img_out = np.zeros((height_out, width_out, MAX_CHANNELS), dtype=np.uint8)
-
+    # Time and carry out grain rendering
     start = time.time()
     for colourChannel in range(MAX_CHANNELS):
         print("_____________________")
