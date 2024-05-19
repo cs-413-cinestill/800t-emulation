@@ -3,10 +3,20 @@ import pycuda.driver as drv
 import pycuda.autoinit
 from pycuda.compiler import SourceModule
 from pycuda import curandom
+from PIL import Image
 import numpy as np
+import time
 import os
+import math
 import matplotlib.pyplot as plt
 
+MAX_CHANNELS = 3
+MAX_GREY_LEVEL = 255
+EPSILON_GREY_LEVEL = 0.1
+
+# arguments of the algorithm
+file_name_in = "data/digital/small.png"
+file_name_out = "data/test_small_modified_algo.png"
 
 if (os.system("cl.exe")):
     os.environ[
@@ -19,26 +29,51 @@ func_mod = SourceModule("""
 #include <curand_kernel.h>
 extern "C" {
     __global__ void func(float *pois_lambda, float *uniform_out,
-    int *pois_rand, curandState *global_state)
+    int *pois_rand, curandState *global_state, int N)
     {
         int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        int idy = blockIdx.y * blockDim.y + threadIdx.y;
         curandState local_state = global_state[idx];
-        pois_rand[idx] = curand_poisson(&local_state, pois_lambda[idx]);
-        uniform_out[idx] = curand_uniform(&local_state);
+        pois_rand[idy*N + idx] = curand_poisson(&local_state, pois_lambda[idy*N + idx]);
+        uniform_out[idy*N + idx] = curand_uniform(&local_state);
         global_state[idx] = local_state;
     }
 }
-""", no_extern_c=1)
+""", no_extern_c=True)
 
 func = func_mod.get_function('func')
 
 if __name__ == '__main__':
     # Define constants
-    size = 4
+    size = (2,2)
     block_size = 64
 
+    image_in = Image.open(file_name_in)
+    img_in = np.asarray(image_in)
+    # img_in = img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)  # normalize the image array
+
+    width_in = image_in.width
+    height_in = image_in.height
+
+    mu_r = 0.025
+    sigma_r = 0.0
+    sigma_filter = 0.8
+    n_monte_carlo = 100
+
+    ag = 1 / math.ceil(1 / mu_r)
+    possible_values = np.arange(MAX_GREY_LEVEL) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
+    lambdas = -(ag ** 2 / (np.pi * (mu_r ** 2 + sigma_r ** 2))) * np.log(1.0 - possible_values)
+    lambda_exps = np.exp(-lambdas)
+
+    start = time.time()
+    img_exp = np.take(lambda_exps * lambdas,
+                      ((img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)) * MAX_GREY_LEVEL).astype(int))
+    end = time.time()
+    print(f"preprocess time {end - start}")
+
+
     # Allocate memory on gpu
-    lambdas = np.array([1,2,3,4], dtype=np.float32)
+    lambdas = np.array([[1,2],[3,4]], dtype=np.float32)
     lambdas_gpu = gpuarray.to_gpu(lambdas)
     sample_gpu_holder = gpuarray.empty(size, dtype=np.int32)
     uniform_gpu_holder = gpuarray.empty(size, dtype=np.float32)
@@ -52,8 +87,9 @@ if __name__ == '__main__':
             uniform_gpu_holder,
             sample_gpu_holder,
             _generator.state,
-            block=(block_size, 1, 1),
-            grid=(size // block_size + 1, 1),
+            np.int32(2),
+            block=(16, 16, 1),
+            grid=(1, 1),
         )
 
     # Retrieve memory from GPU
