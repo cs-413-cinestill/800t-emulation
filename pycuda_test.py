@@ -26,9 +26,6 @@ from pycuda.compiler import SourceModule
 
 func_mod = SourceModule("""
 #include <curand_kernel.h>
-
-// Needed to avoid name mangling so that PyCUDA can
-// find the kernel function:
 extern "C" {
     __global__ void func(float pois_lambda, 
     int *pois_rand, 
