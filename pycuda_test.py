@@ -29,14 +29,17 @@ func_mod = SourceModule("""
 #include <curand_kernel.h>
 extern "C" {
     __global__ void func(float *pois_lambda, float *uniform_out,
-    int *pois_rand, curandState *global_state, int N)
+    int *pois_rand, int N,
+    float *x_gaussian, float *y_gaussian
+    )
     {
         int idx = blockIdx.x * blockDim.x + threadIdx.x;
         int idy = blockIdx.y * blockDim.y + threadIdx.y;
-        curandState local_state = global_state[idx];
+        unsigned long seed = 120;
+        curandState local_state;
+        curand_init(seed, idx, idy, &local_state);
         pois_rand[idy*N + idx] = curand_poisson(&local_state, pois_lambda[idy*N + idx]);
-        uniform_out[idy*N + idx] = curand_uniform(&local_state);
-        global_state[idx] = local_state;
+        uniform_out[idy*N + idx] = float(idx)+0.5;
     }
 }
 """, no_extern_c=True)
@@ -70,25 +73,26 @@ if __name__ == '__main__':
     end = time.time()
     print(f"preprocess time {end - start}")
 
+    x_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo).astype(np.float32)
+    y_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo).astype(np.float32)
 
     # Allocate memory on gpu
     img = img_exp[:,:,0].astype(np.float32)
     lambdas_gpu = gpuarray.to_gpu(img)
+    x_gaussian_list_gpu = gpuarray.to_gpu(x_gaussian_list)
+    y_gaussian_list_gpu = gpuarray.to_gpu(y_gaussian_list)
     sample_gpu_holder = gpuarray.empty((height_in, width_in), dtype=np.int32)
     uniform_gpu_holder = gpuarray.empty((height_in, width_in), dtype=np.float32)
-    # Define the random number generator
-    _generator = curandom.XORWOWRandomNumberGenerator(
-        curandom.seed_getter_unique
-    )
 
     func(
-            lambdas_gpu,
-            uniform_gpu_holder,
-            sample_gpu_holder,
-            _generator.state,
-            np.int32(width_in),
-            block=(16, 16, 1),
-            grid=(16, 16),
+        lambdas_gpu,
+        uniform_gpu_holder,
+        sample_gpu_holder,
+        np.int32(width_in),
+        x_gaussian_list_gpu,
+        y_gaussian_list_gpu,
+        block=(16, 16, 1),
+        grid=(16, 16),
         )
 
     # Retrieve memory from GPU
@@ -96,5 +100,4 @@ if __name__ == '__main__':
     uniform = uniform_gpu_holder.get()
     print(sample_gpu_returned)
     print(uniform)
-    print(_generator.generators_per_block)
 
