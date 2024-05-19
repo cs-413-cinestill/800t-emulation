@@ -27,22 +27,66 @@ if (os.system("cl.exe")):
 
 func_mod = SourceModule("""
 #include <curand_kernel.h>
+#include <math.h>
 extern "C" {
     __global__ void func(float *pois_lambda, float *uniform_out,
     int *pois_rand, int N,
-    float *x_gaussian, float *y_gaussian
+    float *x_gaussian, float *y_gaussian, float ag, int n_monte_carlo
     )
     {
         int idx = blockIdx.x * blockDim.x + threadIdx.x;
         int idy = blockIdx.y * blockDim.y + threadIdx.y;
-        unsigned long seed = 120;
-        curandState local_state;
-        curand_init(seed, idx, idy, &local_state);
-        pois_rand[idy*N + idx] = curand_poisson(&local_state, pois_lambda[idy*N + idx]);
-        uniform_out[idy*N + idx] = float(idx)+0.5;
+        int pix = 0;
+        int pt_covered = 0;
+        
+        float sigmaFilter = 0.8;
+        float maxRadius = 0.025;
+        
+        for (int i=0; i<n_monte_carlo;++i){
+            float xGaussian = idx + sigmaFilter*(x_gaussian[i])/ag;
+            float yGaussian = idy + sigmaFilter*(y_gaussian[i])/ag;
+            
+            //determine the bounding boxes around the current shifted pixel
+            int minX = floor( (xGaussian - maxRadius)/ag);
+            int maxX = floor( (xGaussian + maxRadius)/ag);
+            int minY = floor( (yGaussian - maxRadius)/ag);
+            int maxY = floor( (yGaussian + maxRadius)/ag);
+            
+            for(int ncx = minX; ncx <= maxX; ncx++)
+            {
+                if (pt_covered)
+                    break;
+                for(int ncy = minY; ncy <= maxY; ncy++)
+                {
+                    if (pt_covered)
+                        break;
+                    unsigned long seed = 120;
+                    curandState local_state;
+                    curand_init(seed, ncx, ncx, &local_state);
+                    
+                    float u = pois_lambda[idy*N+idx];
+                    int ncell = curand_poisson(&local_state, u);
+                    for (int k = 0; k < ncell; k++)
+                    {
+                        float xCentreGrain = ncx*ag + ag*curand_uniform(&local_state);
+                        float yCentreGrain = ncy*ag + ag*curand_uniform(&local_state);
+                        
+                        if ((xCentreGrain-xGaussian)*(xCentreGrain-xGaussian) + (yCentreGrain-yGaussian)*(yCentreGrain-yGaussian) < maxRadius * maxRadius)
+                        {
+                            ++pix;
+                            pt_covered = 1;
+                            break;
+                        }
+                    }
+                }
+            }
+            pt_covered = 0;
+        }
+        pois_rand[idy*N+idx]=pix;
     }
 }
 """, no_extern_c=True)
+# todo remove simplification of fetching pixel intensity
 
 func = func_mod.get_function('func')
 
@@ -91,6 +135,8 @@ if __name__ == '__main__':
         np.int32(width_in),
         x_gaussian_list_gpu,
         y_gaussian_list_gpu,
+        np.float32(ag),
+        np.int32(n_monte_carlo),
         block=(16, 16, 1),
         grid=(16, 16),
         )
@@ -100,4 +146,5 @@ if __name__ == '__main__':
     uniform = uniform_gpu_holder.get()
     print(sample_gpu_returned)
     print(uniform)
+    print(ag)
 

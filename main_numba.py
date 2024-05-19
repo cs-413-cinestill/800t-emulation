@@ -30,31 +30,19 @@ def cell_seed(x, y, offset):
 @njit
 def render_pixel(img_in, y_out, x_out, height_in, width_in, offset, n_monte_carlo, grain_radius,
                  sigma_r, sigma_filter, x_gaussian_list, y_gaussian_list):
-    max_radius = grain_radius
 
     ag = 1 / math.ceil(1 / grain_radius)
 
     pix_out = 0.0
 
-    x_in = x_out + 0.5
-    y_in = y_out + 0.5
-
-    # mu = 0.0
-    # sigma = 0.0
-    # if sigma_r > 0.0:
-    #     sigma = math.sqrt(math.log((sigma_r / grain_radius) ** 2 + 1.0))
-    #     mu = math.log(grain_radius) - sigma ** 2 / 2.0
-    #     log_normal_quantile = math.exp(mu + sigma * normal_quantile)
-    #     max_radius = log_normal_quantile
-
     for i in range(n_monte_carlo):
-        x_gaussian = x_in + sigma_filter * x_gaussian_list[i]
-        y_gaussian = y_in + sigma_filter * y_gaussian_list[i]
+        x_gaussian = x_out + 0.5 + sigma_filter * x_gaussian_list[i]
+        y_gaussian = y_out + 0.5 + sigma_filter * y_gaussian_list[i]
 
-        min_x = int((x_gaussian - max_radius) / ag)
-        max_x = int((x_gaussian + max_radius) / ag)
-        min_y = int((y_gaussian - max_radius) / ag)
-        max_y = int((y_gaussian + max_radius) / ag)
+        min_x = int((x_gaussian - grain_radius) / ag)
+        max_x = int((x_gaussian + grain_radius) / ag)
+        min_y = int((y_gaussian - grain_radius) / ag)
+        max_y = int((y_gaussian + grain_radius) / ag)
 
         pt_covered = False
         for ncx in range(min_x, max_x + 1):
