@@ -45,8 +45,6 @@ func = func_mod.get_function('func')
 
 if __name__ == '__main__':
     # Define constants
-    size = (2,2)
-    block_size = 64
 
     image_in = Image.open(file_name_in)
     img_in = np.asarray(image_in)
@@ -54,6 +52,7 @@ if __name__ == '__main__':
 
     width_in = image_in.width
     height_in = image_in.height
+    size = (height_in,width_in)
 
     mu_r = 0.025
     sigma_r = 0.0
@@ -73,10 +72,10 @@ if __name__ == '__main__':
 
 
     # Allocate memory on gpu
-    lambdas = np.array([[1,2],[3,4]], dtype=np.float32)
-    lambdas_gpu = gpuarray.to_gpu(lambdas)
-    sample_gpu_holder = gpuarray.empty(size, dtype=np.int32)
-    uniform_gpu_holder = gpuarray.empty(size, dtype=np.float32)
+    img = img_exp[:,:,0].astype(np.float32)
+    lambdas_gpu = gpuarray.to_gpu(img)
+    sample_gpu_holder = gpuarray.empty((height_in, width_in), dtype=np.int32)
+    uniform_gpu_holder = gpuarray.empty((height_in, width_in), dtype=np.float32)
     # Define the random number generator
     _generator = curandom.XORWOWRandomNumberGenerator(
         curandom.seed_getter_unique
@@ -87,9 +86,9 @@ if __name__ == '__main__':
             uniform_gpu_holder,
             sample_gpu_holder,
             _generator.state,
-            np.int32(2),
+            np.int32(width_in),
             block=(16, 16, 1),
-            grid=(1, 1),
+            grid=(16, 16),
         )
 
     # Retrieve memory from GPU
@@ -97,4 +96,5 @@ if __name__ == '__main__':
     uniform = uniform_gpu_holder.get()
     print(sample_gpu_returned)
     print(uniform)
+    print(_generator.generators_per_block)
 
