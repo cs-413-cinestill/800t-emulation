@@ -28,18 +28,16 @@ def cell_seed(x, y, offset):
 
 # Render one pixel in the pixel-wise algorithm
 @njit
-def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_out, offset, n_monte_carlo, grain_radius,
+def render_pixel(img_in, y_out, x_out, height_in, width_in, offset, n_monte_carlo, grain_radius,
                  sigma_r, sigma_filter, x_gaussian_list, y_gaussian_list):
     max_radius = grain_radius
 
     ag = 1 / math.ceil(1 / grain_radius)
-    zoom_x = (width_out - 1) / (width_in - 1)
-    zoom_y = (height_out - 1) / (height_in - 1)
 
     pix_out = 0.0
 
-    x_in = (x_out + 0.5) * (width_in / width_out)
-    y_in = (y_out + 0.5) * (height_in / height_out)
+    x_in = x_out + 0.5
+    y_in = y_out + 0.5
 
     # mu = 0.0
     # sigma = 0.0
@@ -50,13 +48,13 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_ou
     #     max_radius = log_normal_quantile
 
     for i in range(n_monte_carlo):
-        x_gaussian = x_in + sigma_filter * x_gaussian_list[i] / zoom_x
-        y_gaussian = y_in + sigma_filter * y_gaussian_list[i] / zoom_y
+        x_gaussian = x_in + sigma_filter * x_gaussian_list[i]
+        y_gaussian = y_in + sigma_filter * y_gaussian_list[i]
 
-        min_x = math.floor((x_gaussian - max_radius) / ag)
-        max_x = math.floor((x_gaussian + max_radius) / ag)
-        min_y = math.floor((y_gaussian - max_radius) / ag)
-        max_y = math.floor((y_gaussian + max_radius) / ag)
+        min_x = int((x_gaussian - max_radius) / ag)
+        max_x = int((x_gaussian + max_radius) / ag)
+        min_y = int((y_gaussian - max_radius) / ag)
+        max_y = int((y_gaussian + max_radius) / ag)
 
         pt_covered = False
         for ncx in range(min_x, max_x + 1):
@@ -71,8 +69,8 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_ou
                 seed = cell_seed(ncx, ncy, offset)
                 np.random.seed(seed)
 
-                n_cell = np.random.poisson(img_in[min(max(math.floor(cell_corner_y), 0), height_in - 1)][min(max(
-                    math.floor(cell_corner_x), 0), width_in - 1)])
+                n_cell = np.random.poisson(img_in[min(max(int(cell_corner_y), 0), height_in - 1)][min(max(
+                    int(cell_corner_x), 0), width_in - 1)])
                 for k in range(n_cell):
                     x_centre_grain = cell_corner_x + ag * np.random.uniform()
                     y_centre_grain = cell_corner_y + ag * np.random.uniform()
@@ -94,16 +92,16 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_ou
 
 # Pixel-wise film grain rendering algorithm
 @njit(parallel=True)
-def film_grain_rendering_pixel_wise(img_in, grain_radius, grain_std, sigma_filter, n_monte_carlo, height_out, width_out,
+def film_grain_rendering_pixel_wise(img_in, grain_radius, grain_std, sigma_filter, n_monte_carlo,
                                     grain_seed, progress_proxy):
     x_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
     y_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
 
-    img_out = np.zeros((height_out, width_out))
+    img_out = np.zeros(img_in.shape)
 
     for i in prange(img_out.shape[0]):
         for j in prange(img_out.shape[1]):
-            pix = render_pixel(img_in, i, j, img_in.shape[0], img_in.shape[1], img_out.shape[0], img_out.shape[1],
+            pix = render_pixel(img_in, i, j, img_in.shape[0], img_in.shape[1],
                                grain_seed, n_monte_carlo, grain_radius, grain_std, sigma_filter,
                                x_gaussian_list, y_gaussian_list)
             img_out[i, j] = pix
@@ -117,18 +115,13 @@ if __name__ == '__main__':
     img_in = np.asarray(image_in)
     # img_in = img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)  # normalize the image array
 
-    zoom = 1.0
-
     width_in = image_in.width
     height_in = image_in.height
-    height_out = int(zoom * height_in)
-    width_out = int(zoom * width_in)
 
     mu_r = 0.025
     sigma_r = 0.0
     sigma_filter = 0.8
     n_monte_carlo = 100
-
 
     ag = 1 / math.ceil(1 / mu_r)
     possible_values = np.arange(MAX_GREY_LEVEL) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
@@ -147,11 +140,11 @@ if __name__ == '__main__':
     img_in_temp = np.zeros((2, 2, 3))[:, :, 0]  # cannot remove slicing or runs much slower at start of color channel 0
     # trigger function compilation
     with ProgressBar(total=2) as progress:
-        film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo, 2, 2,
+        film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo,
                                         random.randint(0, 1000), progress)
 
     # Carry out film grain synthesis
-    img_out = np.zeros((height_out, width_out, MAX_CHANNELS), dtype=np.uint8)
+    img_out = np.zeros((height_in, width_in, MAX_CHANNELS), dtype=np.uint8)
     # Time and carry out grain rendering
     start = time.time()
     for colourChannel in range(MAX_CHANNELS):
@@ -164,8 +157,7 @@ if __name__ == '__main__':
         img_out_temp = []
         with ProgressBar(total=img_in.shape[0]) as progress:
             img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo,
-                                                           height_out, width_out, random.randint(0, 1000),
-                                                           progress)
+                                                           random.randint(0, 1000), progress)
         img_out_temp *= (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
         img_out[:, :, colourChannel] = img_out_temp
 
