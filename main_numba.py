@@ -29,8 +29,7 @@ def cell_seed(x, y, offset):
 # Render one pixel in the pixel-wise algorithm
 @njit
 def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_out, offset, n_monte_carlo, grain_radius,
-                 sigma_r, sigma_filter, lambda_list, exp_lambda_list, x_gaussian_list, y_gaussian_list):
-    normal_quantile = 3.0902
+                 sigma_r, sigma_filter, x_gaussian_list, y_gaussian_list):
     max_radius = grain_radius
 
     ag = 1 / math.ceil(1 / grain_radius)
@@ -42,8 +41,8 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_ou
     x_in = (x_out + 0.5) * (width_in / width_out)
     y_in = (y_out + 0.5) * (height_in / height_out)
 
-    mu = 0.0
-    sigma = 0.0
+    # mu = 0.0
+    # sigma = 0.0
     # if sigma_r > 0.0:
     #     sigma = math.sqrt(math.log((sigma_r / grain_radius) ** 2 + 1.0))
     #     mu = math.log(grain_radius) - sigma ** 2 / 2.0
@@ -72,13 +71,8 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_ou
                 seed = cell_seed(ncx, ncy, offset)
                 np.random.seed(seed)
 
-                u = img_in[min(max(math.floor(cell_corner_y), 0), height_in - 1)][min(max(
-                    math.floor(cell_corner_x), 0), width_in - 1)]
-                u_ind = int(math.floor(u * MAX_GREY_LEVEL))
-                curr_lambda = lambda_list[u_ind]
-                curr_exp_lambda = exp_lambda_list[u_ind]
-
-                n_cell = np.random.poisson(curr_lambda * curr_exp_lambda)
+                n_cell = np.random.poisson(img_in[min(max(math.floor(cell_corner_y), 0), height_in - 1)][min(max(
+                    math.floor(cell_corner_x), 0), width_in - 1)])
                 for k in range(n_cell):
                     x_centre_grain = cell_corner_x + ag * np.random.uniform()
                     y_centre_grain = cell_corner_y + ag * np.random.uniform()
@@ -101,7 +95,7 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, height_out, width_ou
 # Pixel-wise film grain rendering algorithm
 @njit(parallel=True)
 def film_grain_rendering_pixel_wise(img_in, grain_radius, grain_std, sigma_filter, n_monte_carlo, height_out, width_out,
-                                    grain_seed, progress_proxy, lambda_list, exp_lambda_list):
+                                    grain_seed, progress_proxy):
     x_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
     y_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
 
@@ -111,7 +105,7 @@ def film_grain_rendering_pixel_wise(img_in, grain_radius, grain_std, sigma_filte
         for j in prange(img_out.shape[1]):
             pix = render_pixel(img_in, i, j, img_in.shape[0], img_in.shape[1], img_out.shape[0], img_out.shape[1],
                                grain_seed, n_monte_carlo, grain_radius, grain_std, sigma_filter,
-                               lambda_list, exp_lambda_list, x_gaussian_list, y_gaussian_list)
+                               x_gaussian_list, y_gaussian_list)
             img_out[i, j] = pix
         progress_proxy.update(1)
 
@@ -121,7 +115,7 @@ def film_grain_rendering_pixel_wise(img_in, grain_radius, grain_std, sigma_filte
 if __name__ == '__main__':
     image_in = Image.open(file_name_in)
     img_in = np.asarray(image_in)
-    img_in = img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)  # normalize the image array
+    # img_in = img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)  # normalize the image array
 
     zoom = 1.0
 
@@ -135,10 +129,17 @@ if __name__ == '__main__':
     sigma_filter = 0.8
     n_monte_carlo = 100
 
+
     ag = 1 / math.ceil(1 / mu_r)
     possible_values = np.arange(MAX_GREY_LEVEL) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
     lambdas = -(ag ** 2 / (np.pi * (mu_r ** 2 + sigma_r ** 2))) * np.log(1.0 - possible_values)
     lambda_exps = np.exp(-lambdas)
+
+    start = time.time()
+    img_exp = np.take(lambda_exps * lambdas, ((img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL))*MAX_GREY_LEVEL).astype(int))
+    end = time.time()
+    print(f"preprocess time {end-start}")
+
 
     print("_____________________")
     print("trigger function compilation")
@@ -147,7 +148,7 @@ if __name__ == '__main__':
     # trigger function compilation
     with ProgressBar(total=2) as progress:
         film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo, 2, 2,
-                                        random.randint(0, 1000), progress, lambdas, lambda_exps)
+                                        random.randint(0, 1000), progress)
 
     # Carry out film grain synthesis
     img_out = np.zeros((height_out, width_out, MAX_CHANNELS), dtype=np.uint8)
@@ -157,14 +158,14 @@ if __name__ == '__main__':
         print("_____________________")
         print("Starting colour channel", colourChannel)
         print("_____________________")
-        img_in_temp = img_in[:, :, colourChannel]
+        img_in_temp = img_exp[:, :, colourChannel]
 
         # Carry out film grain synthesis
         img_out_temp = []
         with ProgressBar(total=img_in.shape[0]) as progress:
             img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo,
                                                            height_out, width_out, random.randint(0, 1000),
-                                                           progress, lambdas, lambda_exps)
+                                                           progress)
         img_out_temp *= (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
         img_out[:, :, colourChannel] = img_out_temp
 
