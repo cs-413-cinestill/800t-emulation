@@ -143,8 +143,6 @@ if __name__ == '__main__':
 
     # Retrieve memory from GPU
     sample_gpu_returned = sample_gpu_holder.get()
-    uniform = uniform_gpu_holder.get()
-    print(sample_gpu_returned)
-    print(uniform)
-    print(ag)
+    plt.imshow(sample_gpu_returned)
+    plt.savefig("test.png")
 
