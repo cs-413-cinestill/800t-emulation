@@ -69,8 +69,7 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, offset, n_monte_carl
                 seed = cell_seed(ncx, ncy, offset)
                 np.random.seed(seed)
 
-                n_cell = np.random.poisson(img_in[min(max(int(cell_corner_y), 0), height_in - 1)][min(max(
-                    int(cell_corner_x), 0), width_in - 1)])
+                n_cell = img_in[min(max(ncy, 0), img_in.shape[0]-1), min(max(ncx, 0), img_in.shape[1]-1)]
                 for k in range(n_cell):
                     x_centre_grain = cell_corner_x + ag * np.random.uniform()
                     y_centre_grain = cell_corner_y + ag * np.random.uniform()
@@ -92,15 +91,15 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, offset, n_monte_carl
 
 # Pixel-wise film grain rendering algorithm
 @njit(parallel=True)
-def film_grain_rendering_pixel_wise(img_in, grain_radius, grain_std, sigma_filter, n_monte_carlo,
+def film_grain_rendering_pixel_wise(img_in, height_in, width_in, grain_radius, grain_std, sigma_filter, n_monte_carlo,
                                     grain_seed, progress_proxy):
     x_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
     y_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
 
-    img_out = np.zeros(img_in.shape)
+    img_out = np.zeros((height_in, width_in))
 
-    for i in prange(img_out.shape[0]):
-        for j in prange(img_out.shape[1]):
+    for i in prange(height_in):
+        for j in prange(width_in):
             pix = render_pixel(img_in, i, j, img_in.shape[0], img_in.shape[1],
                                grain_seed, n_monte_carlo, grain_radius, grain_std, sigma_filter,
                                x_gaussian_list, y_gaussian_list)
@@ -130,6 +129,9 @@ if __name__ == '__main__':
 
     start = time.time()
     img_exp = np.take(lambda_exps * lambdas, ((img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL))*MAX_GREY_LEVEL).astype(int))
+    repeat_factor = int(1/ag)
+    tiled = np.repeat(np.repeat(img_exp, repeat_factor, axis=1), repeat_factor, axis=0)
+    poisson = np.random.poisson(tiled).astype(int)
     end = time.time()
     print(f"preprocess time {end-start}")
 
@@ -138,25 +140,25 @@ if __name__ == '__main__':
     print("trigger function compilation")
     print("_____________________")
     img_in_temp = np.zeros((2, 2, 3))[:, :, 0]  # cannot remove slicing or runs much slower at start of color channel 0
+    img_in_temp = np.repeat(np.repeat(img_in_temp, repeat_factor, axis=1), repeat_factor, axis=0).astype(int)
     # trigger function compilation
     with ProgressBar(total=2) as progress:
-        film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo,
+        film_grain_rendering_pixel_wise(img_in_temp, 2, 2, mu_r, sigma_r, sigma_filter, n_monte_carlo,
                                         random.randint(0, 1000), progress)
 
     # Carry out film grain synthesis
     img_out = np.zeros((height_in, width_in, MAX_CHANNELS), dtype=np.uint8)
     # Time and carry out grain rendering
-    start = time.time()
     for colourChannel in range(MAX_CHANNELS):
         print("_____________________")
         print("Starting colour channel", colourChannel)
         print("_____________________")
-        img_in_temp = img_exp[:, :, colourChannel]
+        img_in_temp = poisson[:, :, colourChannel]
 
         # Carry out film grain synthesis
         img_out_temp = []
         with ProgressBar(total=img_in.shape[0]) as progress:
-            img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo,
+            img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, height_in, width_in, mu_r, sigma_r, sigma_filter, n_monte_carlo,
                                                            random.randint(0, 1000), progress)
         img_out_temp *= (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
         img_out[:, :, colourChannel] = img_out_temp
