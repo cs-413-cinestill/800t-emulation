@@ -15,8 +15,8 @@ MAX_GREY_LEVEL = 255
 EPSILON_GREY_LEVEL = 0.1
 
 # arguments of the algorithm
-file_name_in = "data/digital/small.png"
-file_name_out = "gpu.png"
+file_name_in = "digital_med.png"
+file_name_out = "gpu_med.png"
 
 
 func_mod = SourceModule("""
@@ -27,8 +27,8 @@ func_mod = SourceModule("""
 #define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
 
 extern "C" {
-    __global__ void func(float *pois_lambda, int *pois_rand, int N,
-    float *x_gaussian, float *y_gaussian, float ag, int n_monte_carlo
+    __global__ void func(float *pois_lambda, int *pois_rand, int width, int height,
+    float *x_gaussian, float *y_gaussian, float ag, int n_monte_carlo, float sigma_filter, float grain_radius
     )
     {
         int idx = blockIdx.x * blockDim.x + threadIdx.x;
