@@ -18,19 +18,12 @@ EPSILON_GREY_LEVEL = 0.1
 file_name_in = "data/digital/small.png"
 file_name_out = "data/test_small_modified_algo.png"
 
-if (os.system("cl.exe")):
-    os.environ[
-        'PATH'] += ';' + r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.39.33519\bin\Hostx64\x64"
-if (os.system("cl.exe")):
-    raise RuntimeError("cl.exe still not found, path probably incorrect")
-
 
 func_mod = SourceModule("""
 #include <curand_kernel.h>
 #include <math.h>
 extern "C" {
-    __global__ void func(float *pois_lambda, float *uniform_out,
-    int *pois_rand, int N,
+    __global__ void func(float *pois_lambda, int *pois_rand, int N,
     float *x_gaussian, float *y_gaussian, float ag, int n_monte_carlo
     )
     {
@@ -120,29 +113,34 @@ if __name__ == '__main__':
     x_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo).astype(np.float32)
     y_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo).astype(np.float32)
 
-    # Allocate memory on gpu
-    img = img_exp[:,:,0].astype(np.float32)
-    lambdas_gpu = gpuarray.to_gpu(img)
-    x_gaussian_list_gpu = gpuarray.to_gpu(x_gaussian_list)
-    y_gaussian_list_gpu = gpuarray.to_gpu(y_gaussian_list)
-    sample_gpu_holder = gpuarray.empty((height_in, width_in), dtype=np.int32)
-    uniform_gpu_holder = gpuarray.empty((height_in, width_in), dtype=np.float32)
+    full_img = []
 
-    func(
-        lambdas_gpu,
-        uniform_gpu_holder,
-        sample_gpu_holder,
-        np.int32(width_in),
-        x_gaussian_list_gpu,
-        y_gaussian_list_gpu,
-        np.float32(ag),
-        np.int32(n_monte_carlo),
-        block=(16, 16, 1),
-        grid=(16, 16),
-        )
+    for color_channel in range(3):
+        print("_____________________")
+        print("Starting colour channel", color_channel)
+        print("_____________________")
+        # Allocate memory on gpu
+        img = img_exp[:,:,color_channel].astype(np.float32)
+        lambdas_gpu = gpuarray.to_gpu(img)
+        x_gaussian_list_gpu = gpuarray.to_gpu(x_gaussian_list)
+        y_gaussian_list_gpu = gpuarray.to_gpu(y_gaussian_list)
+        sample_gpu_holder = gpuarray.empty((height_in, width_in), dtype=np.int32)
 
-    # Retrieve memory from GPU
-    sample_gpu_returned = sample_gpu_holder.get()
-    plt.imshow(sample_gpu_returned)
-    plt.savefig("test.png")
+        func(
+            lambdas_gpu,
+            sample_gpu_holder,
+            np.int32(width_in),
+            x_gaussian_list_gpu,
+            y_gaussian_list_gpu,
+            np.float32(ag),
+            np.int32(n_monte_carlo),
+            block=(16, 16, 1),
+            grid=(16, 16),
+            )
 
+        # Retrieve memory from GPU
+        full_img.append(sample_gpu_holder.get())
+
+    final_img = ((np.dstack(full_img)/100) * (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)).astype(np.uint8)
+    image_out = Image.fromarray(final_img)
+    image_out.save(file_name_out)
