@@ -18,7 +18,6 @@ EPSILON_GREY_LEVEL = 0.1
 file_name_in = "digital_med.png"
 file_name_out = "gpu_med.png"
 
-
 func_mod = SourceModule("""
 #include <curand_kernel.h>
 #include <math.h>
@@ -95,6 +94,9 @@ extern "C" {
 func = func_mod.get_function('func')
 
 if __name__ == '__main__':
+    # record time
+    start = time.time()
+
     # Define constants
 
     image_in = Image.open(file_name_in)
@@ -103,7 +105,7 @@ if __name__ == '__main__':
 
     width_in = image_in.width
     height_in = image_in.height
-    size = (height_in,width_in)
+    size = (height_in, width_in)
 
     mu_r = 0.025
     sigma_r = 0.0
@@ -115,7 +117,6 @@ if __name__ == '__main__':
     lambdas = -(ag ** 2 / (np.pi * (mu_r ** 2 + sigma_r ** 2))) * np.log(1.0 - possible_values)
     lambda_exps = np.exp(-lambdas)
 
-    start = time.time()
     img_exp = np.take(lambda_exps * lambdas,
                       ((img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)) * MAX_GREY_LEVEL).astype(int))
     end = time.time()
@@ -126,7 +127,7 @@ if __name__ == '__main__':
 
     # cuda parameters
     block_size = (16, 16, 1)
-    grid = (math.ceil(height_in / block_size[0]), math.ceil(width_in / block_size[1]))
+    grid = (math.ceil(width_in / block_size[1]), math.ceil(height_in / block_size[0]))
 
     full_img = []
 
@@ -135,7 +136,7 @@ if __name__ == '__main__':
         print("Starting colour channel", color_channel)
         print("_____________________")
         # Allocate memory on gpu
-        img = img_exp[:,:,color_channel].astype(np.float32)
+        img = img_exp[:, :, color_channel].astype(np.float32)
         lambdas_gpu = gpuarray.to_gpu(img)
         x_gaussian_list_gpu = gpuarray.to_gpu(x_gaussian_list)
         y_gaussian_list_gpu = gpuarray.to_gpu(y_gaussian_list)
@@ -154,11 +155,16 @@ if __name__ == '__main__':
             np.float32(mu_r),
             block=block_size,
             grid=grid,
-            )
+        )
 
         # Retrieve memory from GPU
         full_img.append(sample_gpu_holder.get())
 
-    final_img = ((np.dstack(full_img)/n_monte_carlo) * (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)).astype(np.uint8)
+    final_img = ((np.dstack(full_img) / n_monte_carlo) * (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)).astype(np.uint8)
     image_out = Image.fromarray(final_img)
     image_out.save(file_name_out)
+
+    # record time
+    end = time.time()
+    elapsed_time = end - start
+    print("time elapsed:", elapsed_time)
