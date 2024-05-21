@@ -12,11 +12,11 @@ import matplotlib.pyplot as plt
 
 MAX_CHANNELS = 3
 MAX_GREY_LEVEL = 255
-EPSILON_GREY_LEVEL = 0.1
+EPSILON_GREY_LEVEL = 0.01
 
 # arguments of the algorithm
 file_name_in = "digital_med.png"
-file_name_out = "gpu_med.png"
+file_name_out = "gpu_med.0.5mu.png"
 
 func_mod = SourceModule("""
 #include <curand_kernel.h>
@@ -25,13 +25,25 @@ func_mod = SourceModule("""
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 #define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
 
+#define BLOCK_SIZE 16
+
 extern "C" {
     __global__ void func(float *pois_lambda, int *pois_rand, int width, int height,
-    float *x_gaussian, float *y_gaussian, float ag, int n_monte_carlo, float sigma_filter, float grain_radius
+    float *x_gaussian, float *y_gaussian, float ag, int n_monte_carlo, float sigma_filter, float grain_radius,
+    int seed
     )
     {
         int idx = blockIdx.x * blockDim.x + threadIdx.x;
         int idy = blockIdx.y * blockDim.y + threadIdx.y;
+        
+        __shared__ float scratch[BLOCK_SIZE*BLOCK_SIZE];
+        if ((idx < width) && (idy < height))
+        {
+            scratch[threadIdx.y*BLOCK_SIZE + threadIdx.x] = pois_lambda[idy*width + idx];
+        }
+        
+        __syncthreads();
+        
         if ((idx < width) && (idy < height))
         {
             int pix = 0;
@@ -58,7 +70,6 @@ extern "C" {
                             break;
                         float cell_corner_x = ag * ncx;
                         float cell_corner_y = ag * ncy;
-                        unsigned long seed = 120;
                         curandState local_state;
                         
                         curand_init(seed, ncx, ncy, &local_state);
@@ -66,7 +77,20 @@ extern "C" {
                         
                         int x_img = MAX(MIN(floor(cell_corner_x),width-1),0);
                         int y_img = MAX(MIN(floor(cell_corner_y),height-1),0);
-                        float u = pois_lambda[y_img*width + x_img];
+                        
+                        int x_img_pos = x_img - blockIdx.x * blockDim.x;
+                        int y_img_pos = y_img - blockIdx.y * blockDim.y;
+                        
+                        float u;
+                        
+                        if ((x_img_pos >= 0) && (x_img_pos < BLOCK_SIZE) && (y_img_pos >= 0) && (y_img_pos < BLOCK_SIZE))
+                        {
+                            u = scratch[threadIdx.y*BLOCK_SIZE + threadIdx.x];
+                        } else 
+                        {
+                            u = pois_lambda[y_img*width + x_img];
+                        }
+
                         int ncell = curand_poisson(&local_state, u);
                         for (int k = 0; k < ncell; k++)
                         {
@@ -89,7 +113,6 @@ extern "C" {
     }
 }
 """, no_extern_c=True)
-# todo remove simplification of fetching pixel intensity
 
 func = func_mod.get_function('func')
 
@@ -107,10 +130,10 @@ if __name__ == '__main__':
     height_in = image_in.height
     size = (height_in, width_in)
 
-    mu_r = 0.025
+    mu_r = 0.05
     sigma_r = 0.0
     sigma_filter = 0.8
-    n_monte_carlo = 100
+    n_monte_carlo = 5
 
     ag = 1 / math.ceil(1 / mu_r)
     possible_values = np.arange(MAX_GREY_LEVEL) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
@@ -141,6 +164,7 @@ if __name__ == '__main__':
         x_gaussian_list_gpu = gpuarray.to_gpu(x_gaussian_list)
         y_gaussian_list_gpu = gpuarray.to_gpu(y_gaussian_list)
         sample_gpu_holder = gpuarray.empty((height_in, width_in), dtype=np.int32)
+        seed = np.uint32(np.random.uniform(0,1000000))
 
         func(
             lambdas_gpu,
@@ -153,6 +177,7 @@ if __name__ == '__main__':
             np.int32(n_monte_carlo),
             np.float32(sigma_filter),
             np.float32(mu_r),
+            seed,
             block=block_size,
             grid=grid,
         )

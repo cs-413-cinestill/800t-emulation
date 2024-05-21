@@ -13,8 +13,8 @@ MAX_GREY_LEVEL = 255
 EPSILON_GREY_LEVEL = 0.1
 
 # arguments of the algorithm
-file_name_in = "data/small.png"
-file_name_out = "data/test_small_modified_algo.png"
+file_name_in = "digital_med.png"
+file_name_out = "cpu_med.png"
 
 
 @njit
@@ -109,7 +109,7 @@ if __name__ == '__main__':
     mu_r = 0.025
     sigma_r = 0.0
     sigma_filter = 0.8
-    n_monte_carlo = 100
+    n_monte_carlo = 5
 
     ag = 1 / math.ceil(1 / mu_r)
     possible_values = np.arange(MAX_GREY_LEVEL) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
