@@ -141,10 +141,9 @@ if __name__ == '__main__':
     ag = 1 / math.ceil(1 / mu_r)
     possible_values = np.arange(MAX_GREY_LEVEL) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
     lambdas = -(ag ** 2 / (np.pi * (mu_r ** 2 + sigma_r ** 2))) * np.log(1.0 - possible_values)
-    lambda_exps = np.exp(-lambdas)
 
     start = time.time()
-    img_exp = np.take(lambdas, ((img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL))*MAX_GREY_LEVEL).astype(int))
+    img_lambda = np.take(lambdas, ((img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)) * MAX_GREY_LEVEL).astype(int))
     end = time.time()
     print(f"preprocess time {end-start}")
 
@@ -166,7 +165,7 @@ if __name__ == '__main__':
         print("_____________________")
         print("Starting colour channel", colourChannel)
         print("_____________________")
-        img_in_temp = img_exp[:, :, colourChannel]
+        img_in_temp = img_lambda[:, :, colourChannel]
 
         # Carry out film grain synthesis
         img_out_temp = []
