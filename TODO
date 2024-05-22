@@ -1,0 +1,8 @@
+1. import raw photo demoisaiced with exposure correction class
+1. test finding the inverse of the non linear function applied to the srgb image
+1. implement color difference method to use as metric for which transform works best
+1. implement color space transform abstract class and try linear, affine, and polynomial
+1. calculate all color checker values for all images and  illuminants
+1. evaluate score of different color space transforms
+1. create final 4 color space transforms
+1. build demo ipynb to which we will add the other 2 functions
