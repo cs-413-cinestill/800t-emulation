@@ -13,8 +13,8 @@ MAX_GREY_LEVEL = 255
 EPSILON_GREY_LEVEL = 0.1
 
 # arguments of the algorithm
-file_name_in = "data/small.png"
-file_name_out = "data/test_small_modified_algo.png"
+file_name_in = "digital_med.png"
+file_name_out = "cpu_med_5_iter.png"
 
 
 @njit
@@ -24,6 +24,18 @@ def cell_seed(x, y, offset):
     if seed == 0:
         return 1
     return seed % (2 ** 32)
+
+@njit
+def poisson(lambda_val, exp_lambda):
+    u = np.random.uniform()
+    x=0
+    prod = math.exp(-lambda_val) if exp_lambda <= 0 else exp_lambda
+    sum = prod
+    while u>sum and x < math.floor(lambda_val*10000):
+        x=x+1
+        prod = prod*lambda_val/x
+        sum = sum + prod
+    return x
 
 
 # Render one pixel in the pixel-wise algorithm
@@ -69,8 +81,11 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, offset, n_monte_carl
                 seed = cell_seed(ncx, ncy, offset)
                 np.random.seed(seed)
 
-                n_cell = np.random.poisson(img_in[min(max(int(cell_corner_y), 0), height_in - 1)][min(max(
+                lambda_val = np.random.poisson(img_in[min(max(int(cell_corner_y), 0), height_in - 1)][min(max(
                     int(cell_corner_x), 0), width_in - 1)])
+
+                n_cell = poisson(lambda_val, 0)
+
                 for k in range(n_cell):
                     x_centre_grain = cell_corner_x + ag * np.random.uniform()
                     y_centre_grain = cell_corner_y + ag * np.random.uniform()
@@ -121,7 +136,7 @@ if __name__ == '__main__':
     mu_r = 0.025
     sigma_r = 0.0
     sigma_filter = 0.8
-    n_monte_carlo = 100
+    n_monte_carlo = 5
 
     ag = 1 / math.ceil(1 / mu_r)
     possible_values = np.arange(MAX_GREY_LEVEL) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
@@ -129,7 +144,7 @@ if __name__ == '__main__':
     lambda_exps = np.exp(-lambdas)
 
     start = time.time()
-    img_exp = np.take(lambda_exps * lambdas, ((img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL))*MAX_GREY_LEVEL).astype(int))
+    img_exp = np.take(lambdas, ((img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL))*MAX_GREY_LEVEL).astype(int))
     end = time.time()
     print(f"preprocess time {end-start}")
 
