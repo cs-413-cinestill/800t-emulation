@@ -1,3 +1,4 @@
+from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Tuple
 from functools import reduce
@@ -203,3 +204,35 @@ class ColorCheckerReadings:
         self._color_checker_location.bottom_right = (x, y)
         self._compute_patches_if_ready()
 
+    def apply_transformation(self, func, args) -> ColorCheckerReadings:
+        """
+        Output a new ColorCheckerReadings where a transformation has been applied to the patch data
+        :param func: a function with as first parameter the current patch data, and any other possible parameters
+        :param args: the other possible parameters which will be unpacked and passed as argument 2+ to func
+        :return: a new ColorCheckerReadings with modified patch_data
+        """
+        assert self.patch_data is not None
+        return ColorCheckerReadings(
+            self.color_checker,
+            self.image,
+            _color_checker_location=self._color_checker_location,
+            patch_location_info=self.patch_location_info,
+            patch_data=func(self.patch_data, *args)
+        )
+
+    def apply_new_image(self, image: np.ndarray) -> ColorCheckerReadings:
+        """
+        Output a new ColorCheckerReadings on a transformed image of the current reading with recalculated patch data
+        :param image: the new transformed image. Patch location needs to be identical to the current reading,
+            which must exist
+        :return: a new ColorCheckerReadings with modified image and patch_data
+        """
+        assert self._color_checker_location.is_initialized()
+        new_reading = ColorCheckerReadings(
+            self.color_checker,
+            image,
+            patch_location_info=self.patch_location_info,
+        )
+        new_reading._color_checker_location = self._color_checker_location
+        new_reading._compute_patches_if_ready()
+        return new_reading
