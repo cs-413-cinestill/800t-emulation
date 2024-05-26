@@ -10,6 +10,12 @@ import cv2
 class ColorCheckerLocation:
     """
     Stores the position of a color checker according to the coordinates of its corners in an image
+
+    Attributes:
+        top_left: coordinates of the top left corner of the top left patch in the color checker
+        top_right: coordinates of the top right corner of the top right patch in the color checker
+        bottom_left: coordinates of the bottom left corner of the bottom left patch in the color checker
+        bottom_right: coordinates of the bottom right corner of the bottom right patch in the color checker
     """
     top_left: Tuple[int, int] = None
     top_right: Tuple[int, int] = None
