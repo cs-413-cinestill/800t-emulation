@@ -48,7 +48,7 @@ class ColorTransfer:
         self.patch_data_target = patch_data_target
         self.color_matrix = self._calculate_color_matrix(
             self._expand_patch_data(self.patch_data_source),
-            self._expand_patch_data(self.patch_data_target)
+            self.patch_data_target
         )
 
     def _expand_rgb(self, r: np.ndarray, g: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -67,18 +67,9 @@ class ColorTransfer:
         return self._expand_rgb(r, g, b)
 
     def _calculate_color_matrix(self, source_patches: np.ndarray, target_patches: np.ndarray) -> np.ndarray:
-        zeroes: np.ndarray = np.zeros(source_patches.shape)
         num_expanded_terms = source_patches.shape[1]
         assert num_expanded_terms == len(self.system_terms)
-        assert target_patches.shape == source_patches.shape
-        num_color_channels = 3
-        A = np.block([
-            [source_patches if j == i else zeroes for j in range(num_expanded_terms)]
-            for i in range(num_expanded_terms)
-        ])
-        target = np.ravel(target_patches.T)
-        q, r = la.qr(A, mode='economic')
-        return np.reshape(la.solve_triangular(r, q.T @ target), (num_expanded_terms, num_expanded_terms))[:3,:]
+        return np.linalg.inv(source_patches.T @ source_patches) @ source_patches.T @ target_patches
 
     def apply(self, image: np.ndarray, func: Callable[[np.ndarray], np.ndarray] = identity) -> np.ndarray:
         """
@@ -90,7 +81,7 @@ class ColorTransfer:
             returning the post-processed image
         :return: a 3 channel RGB image with values truncated in range [0,1]
         """
-        return np.minimum(np.maximum(func(self._expand_image(image)@self.color_matrix.T), 0), 1)
+        return np.minimum(np.maximum(func(self._expand_image(image)@self.color_matrix), 0), 1)
 
     @classmethod
     def _from_color_matrix(cls, color_matrix: np.ndarray, system_terms) -> 'ColorTransfer':
