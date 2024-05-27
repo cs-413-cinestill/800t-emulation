@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Tuple
+from typing import Tuple, Callable
 from functools import reduce
 import numpy as np
 import cv2
@@ -210,7 +210,7 @@ class ColorCheckerReadings:
         self._color_checker_location.bottom_right = (x, y)
         self._compute_patches_if_ready()
 
-    def apply_transformation(self, func, args) -> ColorCheckerReadings:
+    def apply_transformation(self, func, args) -> ColorCheckerReadings: # todo change to no argument with new class
         """
         Output a new ColorCheckerReadings where a transformation has been applied to the patch data
         :param func: a function with as first parameter the current patch data, and any other possible parameters
