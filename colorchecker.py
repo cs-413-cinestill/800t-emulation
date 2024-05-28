@@ -218,11 +218,10 @@ class ColorCheckerReadings:
         self._color_checker_location.bottom_right = (x, y)
         self._compute_patches_if_ready()
 
-    def apply_transformation(self, func, args) -> ColorCheckerReadings:  # todo change to no argument with new class
+    def apply_transformation(self, func: Callable[[np.ndarray], np.ndarray]) -> ColorCheckerReadings:
         """
         Output a new ColorCheckerReadings where a transformation has been applied to the patch data
-        :param func: a function with as first parameter the current patch data, and any other possible parameters
-        :param args: the other possible parameters which will be unpacked and passed as argument 2+ to func
+        :param func: a function f(x) = y mapping a numpy array to an output numpy array
         :return: a new ColorCheckerReadings with modified patch_data
         """
         assert self.patch_data is not None
@@ -231,7 +230,7 @@ class ColorCheckerReadings:
             self.image,
             _color_checker_location=self._color_checker_location,
             patch_location_info=self.patch_location_info,
-            patch_data=func(self.patch_data, *args)
+            patch_data=func(self.patch_data)
         )
 
     def apply_new_image(self, image: np.ndarray) -> ColorCheckerReadings:
