@@ -4,6 +4,11 @@ from typing import Tuple, Callable
 from functools import reduce
 import numpy as np
 import cv2
+# matplotlib libraries
+from matplotlib.backend_bases import MouseEvent
+from IPython.display import display
+import ipywidgets as widgets
+import matplotlib.pyplot as plt
 
 
 @dataclass
@@ -155,7 +160,7 @@ class ColorCheckerReadings:
     def _compute_patches_if_ready(self) -> None:
         if self._color_checker_location.is_initialized():
             self._calculate_patch_location()
-            number_patches = int(self.color_checker.num_cols * self.color_checker.num_rows)  # todo error handling if trying to do mean of no pixels
+            number_patches = int(self.color_checker.num_cols * self.color_checker.num_rows)
             extracted_colors = [
                 np.mean(self.image[self.patch_location_info == i + 1], axis=0)
                 for i in range(number_patches)
@@ -213,7 +218,7 @@ class ColorCheckerReadings:
         self._color_checker_location.bottom_right = (x, y)
         self._compute_patches_if_ready()
 
-    def apply_transformation(self, func, args) -> ColorCheckerReadings: # todo change to no argument with new class
+    def apply_transformation(self, func, args) -> ColorCheckerReadings:  # todo change to no argument with new class
         """
         Output a new ColorCheckerReadings where a transformation has been applied to the patch data
         :param func: a function with as first parameter the current patch data, and any other possible parameters
@@ -245,3 +250,77 @@ class ColorCheckerReadings:
         new_reading._color_checker_location = self._color_checker_location
         new_reading._compute_patches_if_ready()
         return new_reading
+
+    @staticmethod
+    def _overlay_color_checker(image: np.ndarray, color_checker: np.ndarray, patch_alpha=1, non_patch_alpha=0.5):
+        """
+        builds an image where the position of the color_checker pattern patches is encoded as the transparency of the image
+        :param image: source image on which to overlay the color_checker
+        :param color_checker: color checker image to overlay. Needs to be at least as large as image
+        :param patch_alpha: transparency value to use when at position of a color checker patch
+        :param non_patch_alpha: transparency value to use when not at position of a color checker patch
+        :return: a numpy array of 4 value pixels: (R, G, B, A) in range [0,1]
+        """
+        color_checker = (color_checker[:image.shape[0], :image.shape[1]] >= 1) * patch_alpha + (
+                color_checker[:image.shape[0], :image.shape[1]] < 1) * non_patch_alpha
+        return np.dstack((image, color_checker))
+
+    def locate_color_checker(self, image: np.ndarray = None) -> None:
+        """
+        Gives a UI interface for the user to correctly identify the color chart on an image
+        Top Left corner: left click;
+        Top Right corner: right click;
+        Bottom Left corner: shift + left click
+        Bottom Right corner: shift + right click
+        :param image: optional image to use for visualization.
+            Does not have to be the same image as for the patch reading,
+            but the colorchart needs to be at the same location on both images.
+            Only works with images with pixel values in range [0,1]
+        """
+        if image is None:
+            image = self.image
+        assert image.shape == self.image.shape
+
+        fig_overlay = plt.figure()
+        im_overlay = plt.imshow(image)
+        out = widgets.Output()
+
+        @out.capture()
+        def onclick(event: MouseEvent):
+            button_to_coord_map = {
+                (1, None): self.assign_top_left,
+                (3, None): self.assign_top_right,
+                (1, 'shift'): self.assign_bottom_left,
+                (3, 'shift'): self.assign_bottom_right
+            }
+            button_to_coord_map[(event.button, event.key)](event.xdata, event.ydata)
+
+            if self.patch_location_info is not None:
+                im_overlay.set_data(self._overlay_color_checker(image, self.patch_location_info))
+                fig_overlay.canvas.draw_idle()
+
+        display(out)
+        cid = fig_overlay.canvas.mpl_connect('button_press_event', onclick)
+
+    def plot_patches(self, title=None):
+        """
+        plot the patch readings of a color chart
+        :param title: optional title passed to the matplotlib figure
+        """
+        assert self.patch_data is not None
+        plt.figure(figsize=(self.color_checker.num_cols, self.color_checker.num_rows))
+        if title is not None:
+            plt.title(title)
+            plt.axis('off')
+        for i in range(self.color_checker.num_rows):
+            for j in range(self.color_checker.num_cols):
+                plt.subplot(self.color_checker.num_rows, self.color_checker.num_cols,
+                            i * self.color_checker.num_cols + j + 1)
+                plt.imshow(
+                    self.patch_data[
+                        np.newaxis, np.newaxis, i * self.color_checker.num_cols + j
+                    ]
+                )
+                plt.axis('off')
+
+    # todo add combine readings
