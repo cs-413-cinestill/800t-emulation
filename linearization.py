@@ -23,6 +23,7 @@ class LinearizeFunction(ABC):
         target_patches: N x 1 numpy array with the approximated Luminosity of the source patches
             of the target patches given during initialization. The order matches the order of the sorted sources patches
     """
+
     def __init__(self, source_patches: np.ndarray, target_patches: np.ndarray):
         """
         :param source_patches: N x 3 numpy array of color patches.
@@ -31,8 +32,8 @@ class LinearizeFunction(ABC):
             Luminosity will be approximated,
             and patch order will be the order of the Luminosity-sorted sources patches.
         """
-        lum_source_patches = 1/2*(np.max(source_patches, axis=1) + np.min(source_patches, axis=1))
-        lum_target_patches = 1/2*(np.max(target_patches, axis=1) + np.min(target_patches, axis=1))
+        lum_source_patches = 1 / 2 * (np.max(source_patches, axis=1) + np.min(source_patches, axis=1))
+        lum_target_patches = 1 / 2 * (np.max(target_patches, axis=1) + np.min(target_patches, axis=1))
         indices = np.argsort(lum_source_patches)
         self.source_patches = np.take_along_axis(lum_source_patches, indices, axis=0)
         self.target_patches = np.take_along_axis(lum_target_patches, indices, axis=0)
@@ -73,7 +74,8 @@ class LinearizeFunction(ABC):
         plt.plot(self.apply(self.source_patches))
         plt.xlabel("patch index (from low to high Luminosity patch)")
         plt.ylabel("Measured Luminosity")
-        plt.legend(['Source patch Luminosity', 'Target patch Luminosity', 'Luminosity of source patches\nafter mapping', 'test'])
+        plt.legend(['Source patch Luminosity', 'Target patch Luminosity', 'Luminosity of source patches\nafter mapping',
+                    'test'])
 
     def plot_mapping(self):
         plt.figure()
@@ -81,7 +83,7 @@ class LinearizeFunction(ABC):
         plt.plot(self.source_patches, self.apply(self.source_patches))
         plt.xlabel("source patch luminosity space")
         plt.ylabel("measured luminosity")
-        plt.legend(['Target patch Luminosity', 'Luminosity of source patches after mapping']) # todo change
+        plt.legend(['Target patch Luminosity', 'Luminosity of source patches after mapping'])  # todo change
 
     @staticmethod
     def load(path: str) -> 'LinearizeFunction':
@@ -103,7 +105,6 @@ class LinearizeFunction(ABC):
             pickle.dump(self, f)
 
 
-
 class Exponential(LinearizeFunction):
     """
     fits an exponential function y=a*exp(b*x)+c to map from source to target patch values.
@@ -114,9 +115,11 @@ class Exponential(LinearizeFunction):
         b: b coefficient of y=a*exp(b*x)+c.
         c: c coefficient of y=a*exp(b*x)+c.
     """
+
     def __init__(self, source_patches: np.ndarray, target_patches: np.ndarray):
         super().__init__(source_patches, target_patches)
-        popt, pcov = curve_fit(self._any_coefficient_func, self.source_patches, self.target_patches, bounds=(0, [10, 10, 10]))
+        popt, pcov = curve_fit(self._any_coefficient_func, self.source_patches, self.target_patches,
+                               bounds=(0, [10, 10, 10]))
         self.a, self.b, self.c = popt
 
     @staticmethod
@@ -131,6 +134,7 @@ class Exponential(LinearizeFunction):
         assert self.b != 0
         return np.log(np.maximum((y - self.c) / self.a, 10e-5)) / self.b
 
+
 class LinearExponential(LinearizeFunction):
     """
     fits an exponential function y=a*exp(b*x)+c*x+d to map from source to target patch values.
@@ -142,9 +146,11 @@ class LinearExponential(LinearizeFunction):
         c: c coefficient of y=a*exp(b*x)+c*x+d
         d: d coefficient of y=a*exp(b*x)+c*x+d
     """
+
     def __init__(self, source_patches: np.ndarray, target_patches: np.ndarray):
         super().__init__(source_patches, target_patches)
-        popt, pcov = curve_fit(self._any_coefficient_func, self.source_patches, self.target_patches, bounds=(0, [10, 10, 10, 10]))
+        popt, pcov = curve_fit(self._any_coefficient_func, self.source_patches, self.target_patches,
+                               bounds=(0, [10, 10, 10, 10]))
         self.a, self.b, self.c, self.d = popt
 
     @staticmethod
@@ -156,6 +162,7 @@ class LinearExponential(LinearizeFunction):
 
     def apply_inv(self, y: np.ndarray) -> np.ndarray:
         return np.real(
-            (-self.c * lambertw((self.a*self.b*np.exp(self.b*(y-self.d)/self.c))/self.c)-self.b*self.d+self.b*y)
-            / (self.b*self.c)
+            (-self.c * lambertw(
+                (self.a * self.b * np.exp(self.b * (y - self.d) / self.c)) / self.c) - self.b * self.d + self.b * y)
+            / (self.b * self.c)
         )

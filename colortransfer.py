@@ -6,8 +6,8 @@ import pickle
 
 class ColorTransfer:
     """
-    Implements a color transfer matrix calculating the necessary transform to go from source patch data
-    to target patch data.
+    Implements a color transfer matrix calculating the necessary transform to go from source patch dataset
+    to target patch dataset.
 
     The color transfer function can calculate its transformation on any combination of products of the patch channels,
     ranging from only the r, g, b channels to squares like r*r, or linear combinations of several channels like r*g*b.
@@ -100,11 +100,11 @@ class ColorTransfer:
 
     def save(self, path: str, light: bool = True) -> None:
         """
-        Save the Color Transfer to a file, usually without the patch data.
+        Save the Color Transfer to a file, usually without the patch dataset.
         Use .ctf files as convention
         :param path: the path of the file
         :param light: only saves the color transfer matrix and system terms to file if True,
-        otherwise saves the patch data as well
+        otherwise saves the patch dataset as well
         """
         with open(path, 'wb') as f:
             pickle.dump(ColorTransfer._from_color_matrix(self.color_matrix, self.system_terms) if light else self, f)

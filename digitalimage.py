@@ -9,7 +9,7 @@ class DigitalImage:
     A digital image container for 12 bit RW2 panasonic raw files
 
     Attributes:
-        raw: the raw image as height x width x 3 numpy array (12 bit data as float)
+        raw: the raw image as height x width x 3 numpy array (12 bit dataset as float)
         thumbnail: the JPEG thumbnail included in the raw image as height x width x 3 numpy array (8 bit as float)
     """
 
@@ -31,4 +31,6 @@ class DigitalImage:
             width = self.raw.shape[1]
             height = self.raw.shape[0]
 
-            self.thumbnail: np.ndarray= np.array(Image.open(io.BytesIO(raw.extract_thumb().data)).resize((width, height))) / 255
+            self.thumbnail: np.ndarray = np.array(
+                Image.open(io.BytesIO(raw.extract_thumb().data)).resize((width, height))
+            ) / 255

@@ -220,7 +220,7 @@ class ColorCheckerReadings:
 
     def apply_transformation(self, func: Callable[[np.ndarray], np.ndarray]) -> ColorCheckerReadings:
         """
-        Output a new ColorCheckerReadings where a transformation has been applied to the patch data
+        Output a new ColorCheckerReadings where a transformation has been applied to the patch dataset
         :param func: a function f(x) = y mapping a numpy array to an output numpy array
         :return: a new ColorCheckerReadings with modified patch_data
         """
@@ -235,7 +235,7 @@ class ColorCheckerReadings:
 
     def apply_new_image(self, image: np.ndarray) -> ColorCheckerReadings:
         """
-        Output a new ColorCheckerReadings on a transformed image of the current reading with recalculated patch data
+        Output a new ColorCheckerReadings on a transformed image of the current reading with recalculated patch dataset
         :param image: the new transformed image. Patch location needs to be identical to the current reading,
             which must exist
         :return: a new ColorCheckerReadings with modified image and patch_data
