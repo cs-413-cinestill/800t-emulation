@@ -10,5 +10,9 @@
 1. build demo ipynb to which we will add the other 2 functions
 1. cleanup and explain test ipynb to color_transfer demo
 1. setup git lfs
+1. create ipynb to test colorspace transforms
 
-Questions: Need to normalize exposure?
+Final files:
+demo file
+calculate several color transforms file
+benchmark color transfer file

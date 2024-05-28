@@ -21,7 +21,7 @@ class DigitalImage:
         :param path: path to .RW2 file
         :param exposure: exposure compensation as a float in .25 increments
         """
-        white = [0, 0, 0, 0]
+        white = [1, 1, 1, 1]
         with rawpy.imread(path) as raw:
             self.raw = raw.postprocess(
                 fbdd_noise_reduction=FBDDNoiseReductionMode.Light,
