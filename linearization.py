@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.special import lambertw
+import pickle
 
 
 class LinearizeFunction(ABC):
@@ -82,6 +83,25 @@ class LinearizeFunction(ABC):
         plt.ylabel("measured luminosity")
         plt.legend(['Target patch Luminosity', 'Luminosity of source patches after mapping']) # todo change
 
+    @staticmethod
+    def load(path: str) -> 'LinearizeFunction':
+        """
+        Load the Function from a file. Use .lfn files as convention
+        :param path: the path of the file
+        :return: a new ColorTransfer object
+        """
+        with open(path, 'rb') as f:
+            return pickle.load(f)
+
+    def save(self, path: str) -> None:
+        """
+        Save the Function to a file
+        Use .lfn files as convention
+        :param path: the path of the file
+        """
+        with open(path, 'wb') as f:
+            pickle.dump(self, f)
+
 
 
 class Exponential(LinearizeFunction):
@@ -125,7 +145,7 @@ class LinearExponential(LinearizeFunction):
     def __init__(self, source_patches: np.ndarray, target_patches: np.ndarray):
         super().__init__(source_patches, target_patches)
         popt, pcov = curve_fit(self._any_coefficient_func, self.source_patches, self.target_patches, bounds=(0, [10, 10, 10, 10]))
-        self.a, self.b, self.c, self.d= popt
+        self.a, self.b, self.c, self.d = popt
 
     @staticmethod
     def _any_coefficient_func(x: np.ndarray, a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray) -> np.ndarray:
