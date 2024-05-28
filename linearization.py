@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+
+import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import curve_fit
 
@@ -6,26 +8,28 @@ from scipy.optimize import curve_fit
 class LinearizeFunction(ABC):
     """
     Calculates a non-linear mapping from source to target patch values.
-    The function is calculated by optimizing the coefficients of the generalized function ´any_coefficient_func´
+    The function is calculated by optimizing the coefficients of the generalized function ´any_coefficient_func´.
+    Patch Luminosity is approximated with 1/2 *(max(RGB channels)+min(RGB channels))
 
     Attributes:
-        source_patches: N x 1 numpy array with the average of all color channels
-            of the source patches given during initialization. These patches are sorted from lowest to highest intensity
-        target_patches: N x 1 numpy array with the average of all color channels
+        source_patches: N x 1 numpy array with the approximated Luminosity of the source patches
+            of the source patches given during initialization. These patches are sorted from lowest to highest Luminosity
+        target_patches: N x 1 numpy array with the approximated Luminosity of the source patches
             of the target patches given during initialization. The order matches the order of the sorted sources patches
     """
     def __init__(self, source_patches: np.ndarray, target_patches: np.ndarray):
         """
         :param source_patches: N x 3 numpy array of color patches.
-            These patches will be averaged to a single channel, and sorted.
+            Luminosity will be approximated, and patches will be sorted by Luminosity.
         :param target_patches: N x 3 numpy array of color patches.
-            These patches will be averaged to a single channel,
-            and the order will be the order of the sorted sources patches.
+            Luminosity will be approximated,
+            and patch order will be the order of the Luminosity-sorted sources patches.
         """
-        avg_source_patches = np.average(source_patches, axis=1)
-        indices = np.argsort(avg_source_patches)
-        self.source_patches = np.take_along_axis(avg_source_patches, indices, axis=0)
-        self.target_patches = np.take_along_axis(np.average(target_patches, axis=1), indices, axis=0)
+        lum_source_patches = 1/2*(np.max(source_patches, axis=1) + np.min(source_patches, axis=1))
+        lum_target_patches = 1/2*(np.max(target_patches, axis=1) + np.min(target_patches, axis=1))
+        indices = np.argsort(lum_source_patches)
+        self.source_patches = np.take_along_axis(lum_source_patches, indices, axis=0)
+        self.target_patches = np.take_along_axis(lum_target_patches, indices, axis=0)
 
     @staticmethod
     @abstractmethod
