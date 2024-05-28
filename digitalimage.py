@@ -30,5 +30,7 @@ class DigitalImage:
                 no_auto_scale=False, no_auto_bright=True, exp_shift=exposure,
                 gamma=(1, 1),
                 user_wb=white,use_camera_wb=False, use_auto_wb=False) / (2**16)
+            width = self.raw.shape[1]
+            height = self.raw.shape[0]
 
-            self.thumbnail = np.array(Image.open(io.BytesIO(raw.extract_thumb().data))) / 255
+            self.thumbnail = np.array(Image.open(io.BytesIO(raw.extract_thumb().data)).resize((width, height))) / 255
