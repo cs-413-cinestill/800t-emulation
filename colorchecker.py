@@ -47,7 +47,8 @@ class ColorChecker:
     """
     Color checker pattern definition.
     Note: the pixels unit should be treated as an arbitrary unit,
-    as the color checker image should be later sized and distorted to fit a real image
+    as the color checker image should be later sized and distorted to fit a real image.
+    It is recommended to make the patches smaller than the actual patches to not include any margins in patch extraction
 
     Attributes:
         num_rows: number of rows of patches
