@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import curve_fit
+from scipy.special import lambertw
 
 
 class LinearizeFunction(ABC):
@@ -11,6 +12,9 @@ class LinearizeFunction(ABC):
     Calculates a non-linear mapping from source to target patch values.
     The function is calculated by optimizing the coefficients of the generalized function ´any_coefficient_func´.
     Patch Luminosity is approximated with 1/2 *(max(RGB channels)+min(RGB channels))
+
+    Note: nothing encodes in this class that the function is non-linear,
+    but it is used in this project to map to quasi-linear digital sensor values
 
     Attributes:
         source_patches: N x 1 numpy array with the approximated Luminosity of the source patches
@@ -68,7 +72,7 @@ class LinearizeFunction(ABC):
         plt.plot(self.apply(self.source_patches))
         plt.xlabel("patch index (from low to high Luminosity patch)")
         plt.ylabel("Measured Luminosity")
-        plt.legend(['Source patch Luminosity', 'Target patch Luminosity', 'Luminosity of source patches\nafter mapping'])
+        plt.legend(['Source patch Luminosity', 'Target patch Luminosity', 'Luminosity of source patches\nafter mapping', 'test'])
 
     def plot_mapping(self):
         plt.figure()
@@ -82,7 +86,13 @@ class LinearizeFunction(ABC):
 
 class Exponential(LinearizeFunction):
     """
-    fits an exponential function a*exp(b*x)+c to map from source to target patch values.
+    fits an exponential function y=a*exp(b*x)+c to map from source to target patch values.
+    Subclass of :class:\`LinearizeFunction\`
+
+    Attributes:
+        a: a coefficient of y=a*exp(b*x)+c.
+        b: b coefficient of y=a*exp(b*x)+c.
+        c: c coefficient of y=a*exp(b*x)+c.
     """
     def __init__(self, source_patches: np.ndarray, target_patches: np.ndarray):
         super().__init__(source_patches, target_patches)
@@ -100,3 +110,32 @@ class Exponential(LinearizeFunction):
         assert self.a != 0
         assert self.b != 0
         return np.log(np.maximum((y - self.c) / self.a, 10e-5)) / self.b
+
+class LinearExponential(LinearizeFunction):
+    """
+    fits an exponential function y=a*exp(b*x)+c*x+d to map from source to target patch values.
+    Subclass of :class:\`LinearizeFunction\`
+
+    Attributes:
+        a: a coefficient of y=a*exp(b*x)+c*x+d
+        b: b coefficient of y=a*exp(b*x)+c*x+d
+        c: c coefficient of y=a*exp(b*x)+c*x+d
+        d: d coefficient of y=a*exp(b*x)+c*x+d
+    """
+    def __init__(self, source_patches: np.ndarray, target_patches: np.ndarray):
+        super().__init__(source_patches, target_patches)
+        popt, pcov = curve_fit(self._any_coefficient_func, self.source_patches, self.target_patches, bounds=(0, [10, 10, 10, 10]))
+        self.a, self.b, self.c, self.d= popt
+
+    @staticmethod
+    def _any_coefficient_func(x: np.ndarray, a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray) -> np.ndarray:
+        return a * np.exp(b * x) + c * x + d
+
+    def apply(self, x: np.ndarray) -> np.ndarray:
+        return self.a * np.exp(self.b * x) + self.c * x + self.d
+
+    def apply_inv(self, y: np.ndarray) -> np.ndarray:
+        return np.real(
+            (-self.c * lambertw((self.a*self.b*np.exp(self.b*(y-self.d)/self.c))/self.c)-self.b*self.d+self.b*y)
+            / (self.b*self.c)
+        )
