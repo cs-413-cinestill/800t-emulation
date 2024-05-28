@@ -1,192 +1,96 @@
+import rawpy
 import numpy as np
 import cv2
-import rawpy
-from math import exp, hypot, pow, floor, ceil
-import time
 
-# Constants
-PI = 3.14159265358979
+def circular_kernel(diameter):
+    radius = diameter // 2
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (diameter, diameter))
+    return kernel
 
+def compute_kernel_diameter(area):
+    min_diameter = 10
+    max_diameter = 100
+    scale_factor = 0.8  # Adjust this factor to scale the kernel size 
+    diameter = int(np.clip(area * scale_factor, min_diameter, max_diameter))
+    return diameter
 
-exposure_lost = -3.0
-green_exposure_lost = -1.4
-blue_exposure_lost = -1.4
-blur_type = "GAUSSIAN"  # Options: "GAUSSIAN", "EXPONENTIAL"
-blur_amt = 3.0
-correct_red_shift = "MATRIX"  # Options: "OFF", "GAIN", "MATRIX"
+def get_dominant_color(img, mask):
+    mask = (mask * 255).astype(np.uint8)
+    masked_img = cv2.bitwise_and(img, img, mask=mask)
+    mean_color = cv2.mean(masked_img, mask=mask)[:3]
+    return np.array(mean_color)
 
-# Helper functions
-def powf(base, exp):
-    return pow(abs(base), exp) if base >= 0 else -pow(abs(base), exp)
+def add_halation(input_path, output_path):
+    # Load the .RW2 image
+    raw = rawpy.imread(input_path)
+    custom_wb = raw.camera_whitebalance
 
-def mv_33_3(mat, v):
-    return np.dot(mat, v)
+    # Post-process the RAW image with custom white balance
+    rgb = raw.postprocess(output_bps=16, user_wb=custom_wb)
 
-def mat_inverse_33(m):
-    return np.linalg.inv(m)
+    # Convert to float32 numpy array for better precision during processing
+    img = rgb.astype(np.float32) / 65535.0
 
-def get_coord(x, width):
-    return int(round((x + 0.5) * (width + 1)))
+    # Convert to grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
-def get_coord_float(x, width):
-    return (x + 0.5) * (width + 1)
+    # Apply a threshold to get bright areas
+    _, bright_mask = cv2.threshold(gray, 0.9999, 1.0, cv2.THRESH_BINARY)
 
-def get_color(x, y, p_TexR, p_TexG, p_TexB):
-    # Clamp coordinates to image boundaries
-    x = max(0, min(x, p_TexR.shape[1] - 1))
-    y = max(0, min(y, p_TexR.shape[0] - 1))
+    # Find contours of the bright areas
+    contours, _ = cv2.findContours(bright_mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    r = p_TexR[y, x]
-    g = p_TexG[y, x]
-    b = p_TexB[y, x]
-    return np.array([r, g, b])
+    # Create a mask of the bright areas, ignoring small areas
+    mask = np.zeros_like(gray)
+    min_contour_area = 500  # Minimum area threshold to consider a contour for halation
 
-def sample_point_bilinear(x, y, p_Width, p_Height, p_TexR, p_TexG, p_TexB):
-    f_x = get_coord_float(x, p_Width)
-    f_y = get_coord_float(y, p_Height)
+    mask_dilated_combined = np.zeros_like(gray)
 
-    x_low = int(floor(f_x))
-    x_high = int(ceil(f_x))
-    y_low = int(floor(f_y))
-    y_high = int(ceil(f_y))
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if area >= min_contour_area:
 
-    c_ll = get_color(x_low, y_low, p_TexR, p_TexG, p_TexB)
-    c_lh = get_color(x_low, y_high, p_TexR, p_TexG, p_TexB)
-    c_hl = get_color(x_high, y_low, p_TexR, p_TexG, p_TexB)
-    c_hh = get_color(x_high, y_high, p_TexR, p_TexG, p_TexB)
+            individual_mask = np.zeros_like(gray)
+            cv2.drawContours(individual_mask, [contour], -1, (1), thickness=cv2.FILLED)
 
-    mix_x = f_x - x_low
-    mix_y = f_y - y_low
+            # Compute kernel diameter based on the area of the contour
+            kernel_diameter = compute_kernel_diameter(area)
 
-    c_l = (1 - mix_x) * c_ll + mix_x * c_hl
-    c_h = (1 - mix_x) * c_lh + mix_x * c_hh
-    c = (1 - mix_y) * c_l + mix_y * c_h
-    return c
+            # Dilate the individual mask
+            kernel = circular_kernel(kernel_diameter)
+            individual_mask_dilated = cv2.dilate(individual_mask, kernel, iterations=1) 
 
-def convert_gamma(g):
-    if g <= 0:
-        return 1.0 + (-4.0 * g)
-    else:
-        return 1.0 / (4.0 * g + 1)
+            # Combine the dilated mask with the accumulated dilated masks
+            mask_dilated_combined = np.maximum(mask_dilated_combined, individual_mask_dilated)
 
-def gaussian_blur(radius, x, y, p_Width, p_Height, p_TexR, p_TexG, p_TexB):
-    std = radius / 2.0
-    window_size = int(ceil(2 * std * 3))
-
-    center_x = get_coord(x, p_Width)
-    center_y = get_coord(y, p_Height)
-
-    sum = np.zeros(3)
-    weight_sum = 0
-    for i in range(center_x - (window_size // 2), center_x + (window_size // 2) + 1):
-        for j in range(center_y - (window_size // 2), center_y + (window_size // 2) + 1):
-            runner = get_color(i, j, p_TexR, p_TexG, p_TexB)
-            weight = 1.0 / (2.0 * PI * std * std) * exp((pow(abs(center_x - i), 2) + pow(abs(center_y - j), 2)) / (-2.0 * std * std))
-            weight_sum += weight
-            sum += runner * weight
-    return sum / weight_sum
-
-def exp_k(x, y, r0):
-    return exp(-hypot(x, y) / r0)
-
-def exp_blur(radius, x, y, p_Width, p_Height, p_TexR, p_TexG, p_TexB):
-    center_x = get_coord(x, p_Width)
-    center_y = get_coord(y, p_Height)
-
-    window_size = int(ceil(2 * radius * 4.5))
-    sum = np.zeros(3)
-    weight_sum = 0
-    for i in range(center_x - (window_size // 2), center_x + (window_size // 2) + 1):
-        for j in range(center_y - (window_size // 2), center_y + (window_size // 2) + 1):
-            weight = exp_k(i - center_x, j - center_y, radius)
-            runner = get_color(i, j, p_TexR, p_TexG, p_TexB)
-            sum += weight * runner
-            weight_sum += weight
-    return sum / weight_sum
-
-def halation(scene_color, diffused_color, exposure_lost_lin, green_exposure_lost_lin, blue_exposure_lost_lin):
-    output = np.copy(scene_color)
-    output[0] += diffused_color[0] * exposure_lost_lin
-    output[1] += diffused_color[0] * exposure_lost_lin * green_exposure_lost_lin
-    output[2] += diffused_color[0] * exposure_lost_lin * green_exposure_lost_lin * blue_exposure_lost_lin
-    return output
-
-def transform(p_Width, p_Height, p_X, p_Y, p_TexR, p_TexG, p_TexB):
-    X = p_X / (p_Width - 1) - 0.5
-    Y = p_Y / (p_Height - 1) - 0.5
-
-    exposure_lost_lin = 2 ** exposure_lost
-    green_exposure_lost_lin = 2 ** green_exposure_lost
-    blue_exposure_lost_lin = 2 ** blue_exposure_lost
-    blur_radius = (blur_amt / 1000.0) * p_Width
-
-    if blur_type == "GAUSSIAN":
-        scale_color = gaussian_blur(blur_radius, X, Y, p_Width, p_Height, p_TexR, p_TexG, p_TexB)
-    elif blur_type == "EXPONENTIAL":
-        scale_color = exp_blur(blur_radius / 3, X, Y, p_Width, p_Height, p_TexR, p_TexG, p_TexB)
-
-    curr_color = get_color(p_X, p_Y, p_TexR, p_TexG, p_TexB)
-    halation_color = halation(curr_color, scale_color, exposure_lost_lin, green_exposure_lost_lin, blue_exposure_lost_lin)
-
-    if correct_red_shift == "MATRIX":
-        red = np.array([1.0, 0.0, 0.0])
-        red_output = halation(red, red, exposure_lost_lin, green_exposure_lost_lin, blue_exposure_lost_lin)
-        green = np.array([0.0, 1.0, 0.0])
-        green_output = halation(green, green, exposure_lost_lin, green_exposure_lost_lin, blue_exposure_lost_lin)
-        blue = np.array([0.0, 0.0, 1.0])
-        blue_output = halation(blue, blue, exposure_lost_lin, green_exposure_lost_lin, blue_exposure_lost_lin)
-
-        forward_matrix = np.array([
-            [red_output[0], green_output[0], blue_output[0]],
-            [red_output[1], green_output[1], blue_output[1]],
-            [red_output[2], green_output[2], blue_output[2]]
-        ])
-        inv_matrix = mat_inverse_33(forward_matrix)
-        output_color = mv_33_3(inv_matrix, halation_color)
-    elif correct_red_shift == "GAIN":
-        white = np.array([1.0, 1.0, 1.0])
-        white_output = halation(white, white, exposure_lost_lin, green_exposure_lost_lin, blue_exposure_lost_lin)
-        output_color = halation_color * white / white_output
-    else:
-        output_color = halation_color
-
-    return output_color
-
-def main(input_image_path, output_image_path):
-    # Load image using rawpy for .RW2 files
-    with rawpy.imread(input_image_path) as raw:
-        rgb_image = raw.postprocess()
-
-    # Convert the rawpy output to OpenCV format
-    image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
-
-    height, width, _ = image.shape
-    p_TexR, p_TexG, p_TexB = image[:, :, 2], image[:, :, 1], image[:, :, 0]
-
-    output_image = np.zeros_like(image)
-    count=0
-    print(height*width)
-    tic = time.perf_counter()
-    for y in range(height):
-        for x in range(width):
-
-            count=count+1
-            transformed_color = transform(width, height, x, y, p_TexR, p_TexG, p_TexB)
-            output_image[y, x] = transformed_color.clip(0, 255).astype(np.uint8)
-
-            if(count==1570):
-                toc = time.perf_counter()
-                print(f" {toc - tic:0.4f} seconds")
-                break
-        else:
-            continue 
-        break  
+    # Apply Gaussian Blur
+    glow = cv2.GaussianBlur(mask_dilated_combined, (0, 0), sigmaX=10, sigmaY=10)
 
 
-   
-    cv2.imwrite(output_image_path, output_image)
+    dominant_color = get_dominant_color(img, mask_dilated_combined)
 
+    # Adjust the tint color based on the dominant color
+    red_tint = np.array([0, 0.15, 0.6])  # Base red-orange color for halation
+    adjusted_tint = 0.5 * red_tint + 0.5 * (dominant_color / 255.0)  # Blend with the dominant color
 
-input_image_path = 'raw.RW2'
-output_image_path = 'output_image.jpg'
-main(input_image_path, output_image_path)
+    # Create the glow effect with the adjusted tint color
+    glow_rgb = cv2.merge([glow * adjusted_tint[0], glow * adjusted_tint[1], glow * adjusted_tint[2]])
+
+    # Amplify the brightness of the bright areas
+    bright_areas = img * mask[..., np.newaxis]
+    bright_areas = np.clip(bright_areas * 2.0, 0, 1)  # Increase brightness
+
+    # Combine the amplified bright areas with the glow effect
+    enhanced_glow_rgb = np.clip(bright_areas + glow_rgb, 0, 1)
+
+    # Combine the original image with the enhanced bright areas and glow effect
+    halation = np.clip(img + enhanced_glow_rgb, 0, 1)
+
+    # Convert the final image to uint8 format for saving
+    halation = (halation * 255).astype(np.uint8)
+
+    # Save the output image
+    cv2.imwrite(output_path, halation)
+
+# Example usage
+add_halation('raw.RW2', 'output.jpg')
