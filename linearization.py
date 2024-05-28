@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
+from scipy.optimize import curve_fit
 
 
 class LinearizeFunction(ABC):
@@ -28,7 +29,7 @@ class LinearizeFunction(ABC):
 
     @staticmethod
     @abstractmethod
-    def any_coefficient_func(x: np.ndarray, *coefficients: np.ndarray) -> np.ndarray:
+    def _any_coefficient_func(x: np.ndarray, *coefficients: np.ndarray) -> np.ndarray:
         """
         applies generalized non-linear function before the coefficients are fixed
         :param x: the input of the function x
@@ -57,4 +58,24 @@ class LinearizeFunction(ABC):
 
 
 class Exponential(LinearizeFunction):
-    pass
+    """
+    fits an exponential function a*exp(b*x)+c to map from source to target patch values.
+    """
+    def __init__(self, source_patches: np.ndarray, target_patches: np.ndarray):
+        super().__init__(source_patches, target_patches)
+
+    def __post_init__(self):
+        popt, pcov = curve_fit(self._any_coefficient_func, self.source_patches, self.target_patches_patches, bounds=(0, [10, 10, 10]))
+        self.a, self.b, self.c = popt
+
+    @staticmethod
+    def _any_coefficient_func(x: np.ndarray, a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.ndarray:
+        return a * np.exp(b * x) + c
+
+    def apply(self, x: np.ndarray) -> np.ndarray:
+        self.a * np.exp(self.b * x) + self.c
+
+    def apply_inv(self, y: np.ndarray) -> np.ndarray:
+        assert self.a != 0
+        assert self.b != 0
+        return np.log(np.maximum((y - self.c) / self.a, 10e-5)) / self.b
