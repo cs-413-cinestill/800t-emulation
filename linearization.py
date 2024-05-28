@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -60,6 +61,24 @@ class LinearizeFunction(ABC):
         """
         pass
 
+    def plot_luminosity(self):
+        plt.figure()
+        plt.plot(self.source_patches)
+        plt.plot(self.target_patches)
+        plt.plot(self.apply(self.source_patches))
+        plt.xlabel("patch index (from low to high Luminosity patch)")
+        plt.ylabel("Measured Luminosity")
+        plt.legend(['Source patch Luminosity', 'Target patch Luminosity', 'Luminosity of source patches\nafter mapping'])
+
+    def plot_mapping(self):
+        plt.figure()
+        plt.plot(self.source_patches, self.target_patches)
+        plt.plot(self.source_patches, self.apply(self.source_patches))
+        plt.xlabel("source patch luminosity space")
+        plt.ylabel("measured luminosity")
+        plt.legend(['Target patch Luminosity', 'Luminosity of source patches after mapping']) # todo change
+
+
 
 class Exponential(LinearizeFunction):
     """
@@ -67,9 +86,7 @@ class Exponential(LinearizeFunction):
     """
     def __init__(self, source_patches: np.ndarray, target_patches: np.ndarray):
         super().__init__(source_patches, target_patches)
-
-    def __post_init__(self):
-        popt, pcov = curve_fit(self._any_coefficient_func, self.source_patches, self.target_patches_patches, bounds=(0, [10, 10, 10]))
+        popt, pcov = curve_fit(self._any_coefficient_func, self.source_patches, self.target_patches, bounds=(0, [10, 10, 10]))
         self.a, self.b, self.c = popt
 
     @staticmethod
@@ -77,7 +94,7 @@ class Exponential(LinearizeFunction):
         return a * np.exp(b * x) + c
 
     def apply(self, x: np.ndarray) -> np.ndarray:
-        self.a * np.exp(self.b * x) + self.c
+        return self.a * np.exp(self.b * x) + self.c
 
     def apply_inv(self, y: np.ndarray) -> np.ndarray:
         assert self.a != 0
