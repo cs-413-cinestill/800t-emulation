@@ -2,7 +2,7 @@
 1. test finding the inverse of the non linear function applied to the srgb image -> done
 1. import raw photo demoisaiced with exposure correction class -> done
 1. implement color space transform abstract class and try linear, affine, and polynomial -> done
-1. implement colorchecker maker class
+1. implement colorchecker maker class -> done
 1. implement linearization class
 1. calculate all color checker values for all images and illuminants
 1. evaluate score of different color space transforms

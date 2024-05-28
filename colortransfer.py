@@ -13,7 +13,7 @@ class ColorTransfer:
     ranging from only the r, g, b channels to squares like r*r, or linear combinations of several channels like r*g*b.
     this is controlled in system_terms
 
-    Parameters
+    Attributes:
         system_terms: list of strings defining the products of channels used in the color matrix calculation
             examples:
                 normal 3x3 linear system: ['r', 'g', 'b']
@@ -21,32 +21,29 @@ class ColorTransfer:
                 polynomial 3x11 system ['r', 'g', 'b', 'rg', 'rb', 'gb', 'rr', 'gg', 'bb', 'rgb', '1']
         patch_data_source : a Nx3 numpy array with the color channel values for each patch
         patch_data_target: a Nx3 numpy array with the color channel values we want to transform source to,
-            for each patch
+        for each patch
         color_matrix: an auto-calculated color transformation matrix. Apply it to an image with the apply function
     """
-    system_terms = List[str]
-    patch_data_source: np.ndarray
-    patch_data_target: np.ndarray
-    color_matrix: np.ndarray
 
     def __init__(self, system_terms: List[str], patch_data_source: np.ndarray,
                  patch_data_target: np.ndarray):
         """
-        intialize the color transfer function
-        system_terms: list of strings defining the products of channels used in the color matrix calculation
+        initialize the color transfer function
+
+        :param system_terms: list of strings defining the products of channels used in the color matrix calculation
             examples:
                 normal 3x3 linear system: ['r', 'g', 'b']
                 3x4 system affine system: ['r', 'g', 'b', '1']
                 polynomial 3x11 system ['r', 'g', 'b', 'rg', 'rb', 'gb', 'rr', 'gg', 'bb', 'rgb', '1']
-        patch_data_source : a Nx3 numpy array with the color channel values for each patch,
+        :param patch_data_source: a Nx3 numpy array with the color channel values for each patch,
             with N the number of sampled patches
-        patch_data_target: a Nx3 numpy array with the color channel values we want to transform source to,
+        :param patch_data_target: a Nx3 numpy array with the color channel values we want to transform source to,
             for each patch
         """
         self.system_terms = system_terms
         self.patch_data_source = patch_data_source
         self.patch_data_target = patch_data_target
-        self.color_matrix = self._calculate_color_matrix(
+        self.color_matrix: np.ndarray = self._calculate_color_matrix(
             self._expand_patch_data(self.patch_data_source),
             self.patch_data_target
         )

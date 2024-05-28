@@ -12,8 +12,6 @@ class DigitalImage:
         raw: the raw image as height x width x 3 numpy array (12 bit data as float)
         thumbnail: the JPEG thumbnail included in the raw image as height x width x 3 numpy array (8 bit as float)
     """
-    raw: np.ndarray
-    thumbnail: np.ndarray
 
     def __init__(self, path: str, exposure: float = 0):
         """
@@ -23,7 +21,7 @@ class DigitalImage:
         """
         white = [1, 1, 1, 1]
         with rawpy.imread(path) as raw:
-            self.raw = raw.postprocess(
+            self.raw: np.ndarray = raw.postprocess(
                 fbdd_noise_reduction=FBDDNoiseReductionMode.Light,
                 output_color=ColorSpace.raw,
                 output_bps=16,
@@ -33,4 +31,4 @@ class DigitalImage:
             width = self.raw.shape[1]
             height = self.raw.shape[0]
 
-            self.thumbnail = np.array(Image.open(io.BytesIO(raw.extract_thumb().data)).resize((width, height))) / 255
+            self.thumbnail: np.ndarray= np.array(Image.open(io.BytesIO(raw.extract_thumb().data)).resize((width, height))) / 255
