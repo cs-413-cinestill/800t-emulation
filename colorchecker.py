@@ -45,7 +45,9 @@ class ColorCheckerLocation:
 @dataclass
 class ColorChecker:
     """
-    Color checker pattern definition
+    Color checker pattern definition.
+    Note: the pixels unit should be treated as an arbitrary unit,
+    as the color checker image should be later sized and distorted to fit a real image
 
     Attributes:
         num_rows: number of rows of patches
