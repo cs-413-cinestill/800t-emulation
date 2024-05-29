@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 import scipy.linalg as la
 from typing import List, Callable
@@ -81,7 +83,7 @@ class ColorTransfer:
         return np.minimum(np.maximum(func(self._expand_image(image)@self.color_matrix), 0), 1)
 
     @classmethod
-    def _from_color_matrix(cls, color_matrix: np.ndarray, system_terms) -> 'ColorTransfer':
+    def _from_color_matrix(cls, color_matrix: np.ndarray, system_terms) -> ColorTransfer:
         color_transfer = cls.__new__(cls)
         super(ColorTransfer, color_transfer).__init__()
         color_transfer.color_matrix = color_matrix
@@ -89,7 +91,7 @@ class ColorTransfer:
         return color_transfer
 
     @staticmethod
-    def load(path: str) -> 'ColorTransfer':
+    def load(path: str) -> ColorTransfer:
         """
         Load the Color Transfer from a file. Use .ctf files as convention
         :param path: the path of the file

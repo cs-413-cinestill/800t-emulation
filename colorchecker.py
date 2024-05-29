@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import pickle
 from dataclasses import dataclass, field
 from typing import Tuple, Callable
 from functools import reduce
@@ -66,7 +68,7 @@ class ColorChecker:
     num_cols: int
     patch_size: int
     inter_patch_distance: int
-    np_array: np.ndarray = None
+    np_array: np.ndarray = None # todo change to getter
 
     def __post_init__(self):
         self.np_array = self._to_np_array()
@@ -186,7 +188,6 @@ class ColorCheckerReading:
         :param y: the y coordinate of the pixel of the top left corner of the color checker in the image
         """
         self._color_checker_location.top_left = (x, y)
-        self._compute_patches_if_ready()
 
     def assign_top_right(self, x, y) -> None:
         """
@@ -196,7 +197,6 @@ class ColorCheckerReading:
         :param y: the y coordinate of the pixel of the top right corner of the color checker in the image
         """
         self._color_checker_location.top_right = (x, y)
-        self._compute_patches_if_ready()
 
     def assign_bottom_left(self, x, y) -> None:
         """
@@ -206,7 +206,6 @@ class ColorCheckerReading:
         :param y: the y coordinate of the pixel of the bottom left corner of the color checker in the image
         """
         self._color_checker_location.bottom_left = (x, y)
-        self._compute_patches_if_ready()
 
     def assign_bottom_right(self, x, y) -> None:
         """
@@ -216,7 +215,6 @@ class ColorCheckerReading:
         :param y: the y coordinate of the pixel of the bottom right corner of the color checker in the image
         """
         self._color_checker_location.bottom_right = (x, y)
-        self._compute_patches_if_ready()
 
     def apply_transformation(self, func: Callable[[np.ndarray], np.ndarray]) -> ColorCheckerReading:
         """
@@ -264,7 +262,7 @@ class ColorCheckerReading:
                 color_checker[:image.shape[0], :image.shape[1]] < 1) * non_patch_alpha
         return np.dstack((image, color_checker))
 
-    def locate_color_checker(self, image: np.ndarray = None) -> None:  # todo implement preloaded position
+    def locate_color_checker(self, image: np.ndarray = None) -> None:
         """
         Gives a UI interface for the user to correctly identify the color chart on an image
         Top Left corner: left click;
@@ -284,6 +282,12 @@ class ColorCheckerReading:
         im_overlay = plt.imshow(image)
         out = widgets.Output()
 
+        def attempt_calculation():
+            self._compute_patches_if_ready()
+            if self.patch_location_info is not None:
+                im_overlay.set_data(self._overlay_color_checker(image, self.patch_location_info))
+                fig_overlay.canvas.draw_idle()
+
         @out.capture()
         def onclick(event: MouseEvent):
             button_to_coord_map = {
@@ -293,11 +297,9 @@ class ColorCheckerReading:
                 (3, 'shift'): self.assign_bottom_right
             }
             button_to_coord_map[(event.button, event.key)](event.xdata, event.ydata)
+            attempt_calculation()
 
-            if self.patch_location_info is not None:
-                im_overlay.set_data(self._overlay_color_checker(image, self.patch_location_info))
-                fig_overlay.canvas.draw_idle()
-
+        attempt_calculation()
         display(out)
         cid = fig_overlay.canvas.mpl_connect('button_press_event', onclick)
 
@@ -321,5 +323,37 @@ class ColorCheckerReading:
                     ]
                 )
                 plt.axis('off')
+
+    @classmethod
+    def _copy_without_image(cls, self: ColorCheckerReading) -> ColorCheckerReading:
+        reading = cls.__new__(cls)
+        super(ColorCheckerReading, reading).__init__()
+        reading.color_checker = self.color_checker
+        reading._color_checker_location = self._color_checker_location
+        reading.patch_data = self.patch_data
+        return reading
+
+    @staticmethod
+    def load(path, image: np.ndarray) -> ColorCheckerReading:
+        """
+        Load the Color Checker reading, and add back the image that was omitted during saving
+        :param path: the path of the file
+        :param image: image used for patch extraction
+        :return:a new ColorCheckerReading object
+        """
+        with open(path, 'rb') as f:
+            reading = pickle.load(f)
+            reading.image = image
+            return reading
+
+    def save(self, path: str) -> None:
+        """
+        Save the Color Checker reading under a light form, without the attached image.
+        Use .ccr files as convention
+        :param path:
+        :return:
+        """
+        with open(path, 'wb') as f:
+            pickle.dump(self._copy_without_image(self), f)
 
     # todo add combine readings
