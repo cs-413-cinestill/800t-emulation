@@ -119,7 +119,7 @@ class ColorChecker:
 
 
 @dataclass
-class ColorCheckerReadings:
+class ColorCheckerReading:
     """
     Stores the readings of a color checker in an image, namely the location of the patches in the image,
     and the extracted patch color
@@ -218,14 +218,14 @@ class ColorCheckerReadings:
         self._color_checker_location.bottom_right = (x, y)
         self._compute_patches_if_ready()
 
-    def apply_transformation(self, func: Callable[[np.ndarray], np.ndarray]) -> ColorCheckerReadings:
+    def apply_transformation(self, func: Callable[[np.ndarray], np.ndarray]) -> ColorCheckerReading:
         """
         Output a new ColorCheckerReadings where a transformation has been applied to the patch dataset
         :param func: a function f(x) = y mapping a numpy array to an output numpy array
         :return: a new ColorCheckerReadings with modified patch_data
         """
         assert self.patch_data is not None
-        return ColorCheckerReadings(
+        return ColorCheckerReading(
             self.color_checker,
             self.image,
             _color_checker_location=self._color_checker_location,
@@ -233,7 +233,7 @@ class ColorCheckerReadings:
             patch_data=func(self.patch_data)
         )
 
-    def apply_new_image(self, image: np.ndarray) -> ColorCheckerReadings:
+    def apply_new_image(self, image: np.ndarray) -> ColorCheckerReading:
         """
         Output a new ColorCheckerReadings on a transformed image of the current reading with recalculated patch dataset
         :param image: the new transformed image. Patch location needs to be identical to the current reading,
@@ -241,7 +241,7 @@ class ColorCheckerReadings:
         :return: a new ColorCheckerReadings with modified image and patch_data
         """
         assert self._color_checker_location.is_initialized()
-        new_reading = ColorCheckerReadings(
+        new_reading = ColorCheckerReading(
             self.color_checker,
             image,
             patch_location_info=self.patch_location_info,
@@ -264,7 +264,7 @@ class ColorCheckerReadings:
                 color_checker[:image.shape[0], :image.shape[1]] < 1) * non_patch_alpha
         return np.dstack((image, color_checker))
 
-    def locate_color_checker(self, image: np.ndarray = None) -> None:
+    def locate_color_checker(self, image: np.ndarray = None) -> None:  # todo implement preloaded position
         """
         Gives a UI interface for the user to correctly identify the color chart on an image
         Top Left corner: left click;
