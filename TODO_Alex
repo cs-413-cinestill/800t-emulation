@@ -9,7 +9,6 @@
 1. create final 4 color space transforms
 1. build demo ipynb to which we will add the other 2 functions
 1. cleanup and explain test ipynb to color_transfer demo
-1. setup git lfs -> done
 1. create ipynb to test colorspace transforms
 1. Readme
 
