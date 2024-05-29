@@ -3,7 +3,7 @@ from __future__ import annotations
 import pickle
 from dataclasses import dataclass, field
 from typing import Tuple, Callable
-from functools import reduce
+from functools import reduce, cached_property
 import numpy as np
 import cv2
 # matplotlib libraries
@@ -68,10 +68,10 @@ class ColorChecker:
     num_cols: int
     patch_size: int
     inter_patch_distance: int
-    np_array: np.ndarray = None # todo change to getter
 
-    def __post_init__(self):
-        self.np_array = self._to_np_array()
+    @cached_property
+    def np_array(self) -> np.ndarray:
+        return self._to_np_array()
 
     def _to_np_array(self) -> np.ndarray:
         """
@@ -325,10 +325,16 @@ class ColorCheckerReading:
                 plt.axis('off')
 
     @classmethod
-    def _copy_without_image(cls, self: ColorCheckerReading) -> ColorCheckerReading:
+    def _light_copy(cls, self: ColorCheckerReading) -> ColorCheckerReading:
         reading = cls.__new__(cls)
         super(ColorCheckerReading, reading).__init__()
-        reading.color_checker = self.color_checker
+        # reset color checker lazy evaluation for small file size
+        reading.color_checker = ColorChecker(
+            self.color_checker.num_rows,
+            self.color_checker.num_cols,
+            self.color_checker.patch_size,
+            self.color_checker.inter_patch_distance
+        )
         reading._color_checker_location = self._color_checker_location
         reading.patch_data = self.patch_data
         return reading
@@ -354,6 +360,6 @@ class ColorCheckerReading:
         :return:
         """
         with open(path, 'wb') as f:
-            pickle.dump(self._copy_without_image(self), f)
+            pickle.dump(self._light_copy(self), f)
 
     # todo add combine readings
