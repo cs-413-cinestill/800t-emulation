@@ -1,3 +1,0 @@
-*.RW2 filter=lfs diff=lfs merge=lfs -text
-*.TIF filter=lfs diff=lfs merge=lfs -text
-*.TIFF filter=lfs diff=lfs merge=lfs -text
