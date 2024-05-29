@@ -7,14 +7,17 @@ from numba import njit, prange
 from numba_progress import ProgressBar
 
 MAX_CHANNELS = 3
-PIXEL_WISE = 0
-GRAIN_WISE = 1
 MAX_GREY_LEVEL = 255
 EPSILON_GREY_LEVEL = 0.1
 
+mu_r = 0.05
+sigma_r = 0.0
+sigma_filter = 0.8
+n_monte_carlo = 100
+
 # arguments of the algorithm
-file_name_in = "digital_med.png"
-file_name_out = "cpu_med_5_iter.png"
+file_name_in = "data/digital/numba_test.jpg"
+file_name_out = "data/digital/numba_test_out.jpg"
 
 
 @njit
@@ -24,6 +27,7 @@ def cell_seed(x, y, offset):
     if seed == 0:
         return 1
     return seed % (2 ** 32)
+
 
 @njit
 def poisson(lambda_val, exp_lambda):
@@ -40,11 +44,10 @@ def poisson(lambda_val, exp_lambda):
 
 # Render one pixel in the pixel-wise algorithm
 @njit
-def render_pixel(img_in, y_out, x_out, height_in, width_in, offset, n_monte_carlo, grain_radius,
-                 sigma_r, sigma_filter, x_gaussian_list, y_gaussian_list):
-    max_radius = grain_radius
+def render_pixel(chan_in, y_out, x_out, offset, x_gaussian_list, y_gaussian_list):
+    max_radius = mu_r
 
-    ag = 1 / math.ceil(1 / grain_radius)
+    ag = 1 / math.ceil(1 / mu_r)
 
     pix_out = 0.0
 
@@ -81,7 +84,7 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, offset, n_monte_carl
                 seed = cell_seed(ncx, ncy, offset)
                 np.random.seed(seed)
 
-                lambda_val = np.random.poisson(img_in[min(max(int(cell_corner_y), 0), height_in - 1)][min(max(
+                lambda_val = np.random.poisson(chan_in[min(max(int(cell_corner_y), 0), height_in - 1)][min(max(
                     int(cell_corner_x), 0), width_in - 1)])
 
                 n_cell = poisson(lambda_val, 0)
@@ -98,7 +101,7 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, offset, n_monte_carl
                     #     print("Error, the standard deviation of the grain should be positive.")
                     #     return
 
-                    if (x_centre_grain - x_gaussian) ** 2 + (y_centre_grain - y_gaussian) ** 2 < grain_radius ** 2:
+                    if (x_centre_grain - x_gaussian) ** 2 + (y_centre_grain - y_gaussian) ** 2 < mu_r ** 2:
                         pix_out += 1.0
                         pt_covered = True
                         break
@@ -107,36 +110,31 @@ def render_pixel(img_in, y_out, x_out, height_in, width_in, offset, n_monte_carl
 
 # Pixel-wise film grain rendering algorithm
 @njit(parallel=True)
-def film_grain_rendering_pixel_wise(img_in, grain_radius, grain_std, sigma_filter, n_monte_carlo,
-                                    grain_seed, progress_proxy):
+def film_grain_rendering_pixel_wise(chan_in, grain_seed, progress_proxy):
     x_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
     y_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
 
-    img_out = np.zeros(img_in.shape)
+    chan_out = np.zeros(chan_in.shape)
 
-    for i in prange(img_out.shape[0]):
-        for j in prange(img_out.shape[1]):
-            pix = render_pixel(img_in, i, j, img_in.shape[0], img_in.shape[1],
-                               grain_seed, n_monte_carlo, grain_radius, grain_std, sigma_filter,
-                               x_gaussian_list, y_gaussian_list)
-            img_out[i, j] = pix
+    for i in prange(chan_out.shape[0]):
+        for j in prange(chan_out.shape[1]):
+            pix = render_pixel(chan_in, i, j, grain_seed, x_gaussian_list, y_gaussian_list)
+            chan_out[i, j] = pix
         progress_proxy.update(1)
 
-    return img_out
+    return chan_out
 
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+
     image_in = Image.open(file_name_in)
     img_in = np.asarray(image_in)
     # img_in = img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)  # normalize the image array
 
     width_in = image_in.width
     height_in = image_in.height
-
-    mu_r = 0.025
-    sigma_r = 0.0
-    sigma_filter = 0.8
-    n_monte_carlo = 5
 
     ag = 1 / math.ceil(1 / mu_r)
     possible_values = np.arange(MAX_GREY_LEVEL) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
@@ -154,8 +152,7 @@ if __name__ == '__main__':
     img_in_temp = np.zeros((2, 2, 3))[:, :, 0]  # cannot remove slicing or runs much slower at start of color channel 0
     # trigger function compilation
     with ProgressBar(total=2) as progress:
-        film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo,
-                                        random.randint(0, 1000), progress)
+        film_grain_rendering_pixel_wise(img_in_temp, random.randint(0, 1000), progress)
 
     # Carry out film grain synthesis
     img_out = np.zeros((height_in, width_in, MAX_CHANNELS), dtype=np.uint8)
@@ -170,8 +167,7 @@ if __name__ == '__main__':
         # Carry out film grain synthesis
         img_out_temp = []
         with ProgressBar(total=img_in.shape[0]) as progress:
-            img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, mu_r, sigma_r, sigma_filter, n_monte_carlo,
-                                                           random.randint(0, 1000), progress)
+            img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, random.randint(0, 1000), progress)
         img_out_temp *= (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
         img_out[:, :, colourChannel] = img_out_temp
 
