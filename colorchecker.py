@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pickle
 from dataclasses import dataclass, field
-from typing import Tuple, Callable
+from typing import Tuple, Callable, List
 from functools import reduce, cached_property
 import numpy as np
 import cv2
@@ -119,6 +119,12 @@ class ColorChecker:
         pattern = self.np_array
         return ColorCheckerLocation((0, 0), (pattern.shape[1], 0), (0, pattern.shape[0]),
                                     (pattern.shape[1], pattern.shape[0]))
+
+    def __eq__(self, other):
+        return self.num_cols == other.num_cols \
+            and self.num_rows == other.num_rows \
+            and self.patch_size == other.patch_size \
+            and self.inter_patch_distance == other.inter_patch_distance
 
 
 @dataclass
@@ -375,4 +381,23 @@ class ColorCheckerReading:
         return ColorCheckerReading.load(path, image)\
             if Path(path).is_file() else ColorCheckerReading(color_checker, image)
 
-    # todo add combine horizontal readings
+    @staticmethod
+    def combine(readings: List[ColorCheckerReading]) -> ColorCheckerReading:
+        """
+        Create a new image-less reading from a list of readings. The readings are stacked vertically
+        :param readings: a list of readings
+        :return: a new combiner ColorCheckerReading, without a link to an image
+        """
+        for reading in readings:
+            assert reading.color_checker == readings[0].color_checker
+        color_checker = readings[0].color_checker
+        num_readings = len(readings)
+        combined_Color_Checker = ColorChecker(color_checker.num_rows*num_readings,
+                                              color_checker.num_cols,
+                                              color_checker.patch_size,
+                                              color_checker.inter_patch_distance)
+        return ColorCheckerReading(
+            combined_Color_Checker,
+            None,
+            patch_data=np.concatenate(list(map(lambda reading: reading.patch_data, readings)))
+        )
