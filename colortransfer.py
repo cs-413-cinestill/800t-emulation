@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import numpy as np
-import scipy.linalg as la
 from typing import List, Callable
 from utils import identity
 import pickle

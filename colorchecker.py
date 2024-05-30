@@ -6,6 +6,7 @@ from typing import Tuple, Callable
 from functools import reduce, cached_property
 import numpy as np
 import cv2
+from pathlib import Path
 # matplotlib libraries
 from matplotlib.backend_bases import MouseEvent
 from IPython.display import display
@@ -342,7 +343,7 @@ class ColorCheckerReading:
     @staticmethod
     def load(path, image: np.ndarray) -> ColorCheckerReading:
         """
-        Load the Color Checker reading, and add back the image that was omitted during saving
+        Load the Color Checker reading, and add back the image that was omitted during saving.
         :param path: the path of the file
         :param image: image used for patch extraction
         :return:a new ColorCheckerReading object
@@ -356,10 +357,22 @@ class ColorCheckerReading:
         """
         Save the Color Checker reading under a light form, without the attached image.
         Use .ccr files as convention
-        :param path:
-        :return:
+        :param path: the path to which we save. Directory needs to exist.
         """
         with open(path, 'wb') as f:
             pickle.dump(self._light_copy(self), f)
 
-    # todo add combine readings
+    @staticmethod
+    def load_if_exists(path, image: np.ndarray, color_checker: ColorChecker) -> ColorCheckerReading:
+        """
+        Loads a Color Checker reading from path if it exists (and appends the image omitted during saving),
+        otherwise creates a new one with the provided image and ColorChecker.
+        :param path: the path from which we are trying to load the color checker.
+        :param image: image we are extracting color checker patch information from
+        :param color_checker: color checker pattern we are reading in the image
+        :return: a new ColorCheckerReading object
+        """
+        return ColorCheckerReading.load(path, image)\
+            if Path(path).is_file() else ColorCheckerReading(color_checker, image)
+
+    # todo add combine horizontal readings
