@@ -45,24 +45,17 @@ class ColorTransfer:
         self.patch_data_source = patch_data_source
         self.patch_data_target = patch_data_target
         self.color_matrix: np.ndarray = self._calculate_color_matrix(
-            self._expand_patch_data(self.patch_data_source),
+            self._expand_matrix(self.patch_data_source),
             self.patch_data_target
         )
 
-    def _expand_rgb(self, r: np.ndarray, g: np.ndarray, b: np.ndarray) -> np.ndarray:
+    def _expand_matrix(self, image: np.ndarray) -> np.ndarray:
+        r, g, b = np.split(image, 3, axis=-1)
         matrix_of_1s = np.ones(r.shape)
         string_to_matrix = {'r': r, 'g': g, 'b': b, '1': matrix_of_1s}
         list_of_matrices_lists = [[string_to_matrix[letter] for letter in letters] for letters in self.system_terms]
         matrices = [np.prod(matrices, axis=0) for matrices in list_of_matrices_lists]
         return np.squeeze(np.dstack(matrices))
-
-    def _expand_patch_data(self, patch_data: np.ndarray) -> np.ndarray:
-        r, g, b = np.split(patch_data, 3, axis=1)
-        return self._expand_rgb(r, g, b)
-
-    def _expand_image(self, image: np.ndarray) -> np.ndarray:
-        r, g, b = np.split(image, 3, axis=2)
-        return self._expand_rgb(r, g, b)
 
     def _calculate_color_matrix(self, source_patches: np.ndarray, target_patches: np.ndarray) -> np.ndarray:
         num_expanded_terms = source_patches.shape[1]
@@ -79,7 +72,7 @@ class ColorTransfer:
             returning the post-processed image
         :return: a 3 channel RGB image with values truncated in range [0,1]
         """
-        return np.minimum(np.maximum(func(self._expand_image(image)@self.color_matrix), 0), 1)
+        return np.minimum(np.maximum(func(self._expand_matrix(image)@self.color_matrix), 0), 1)
 
     @classmethod
     def _from_color_matrix(cls, color_matrix: np.ndarray, system_terms) -> ColorTransfer:
