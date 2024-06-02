@@ -2,29 +2,47 @@ import random
 import time
 import math
 import numpy as np
-from PIL import Image
 from numba import njit, prange
 from numba_progress import ProgressBar
 
-MAX_CHANNELS = 3
-MAX_GREY_LEVEL = 255
-EPSILON_GREY_LEVEL = 0.1
 
-mu_r = 0.1
+"""
+Implements the necessary functions the needed functions to generate and render grain on an image.
+
+The grain can be altered using multiple parameters.
+
+mu_r: float, the average size of the grain, in unit relative to the input image grid
+sigma_r: float, the standard deviation of the grain, relative to mu_r
+sigma_filter: float, the sigma of the gaussian filter's distribution
+n_monte_carlo: int, the number of Monte Carlo iterations to simulate the gaussian distribution
+
+It also uses a few constants.
+
+NUM_CHANNELS: the number of color channels on which to compute
+MAX_INTENSITY: the maximum intensity value in an image
+EPSILON_INTENSITY: small parameter to avoid some division by 0
+"""
+
+mu_r = 0.15
 sigma_r = 0
 sigma_filter = 0.8
-n_monte_carlo = 5
+n_monte_carlo = 100
 
-height_in = 0
-width_in = 0
-
-# arguments of the algorithm
-file_name_in = "data/digital/after_transfer.png"
-file_name_out = "data/digital/after_grain.png"
+NUM_CHANNELS = 3
+MAX_INTENSITY = 255
+EPSILON_INTENSITY = 0.1
 
 
 @njit
 def cell_seed(x, y, offset):
+    """
+    Generate a seed for the poisson distribution for a specific cell
+
+    :param x: x coordinate of the cell
+    :param y: y coordinate of the cell
+    :param offset: random offset generated for the color channel
+    :return: the generated seed
+    """
     period = 2 ** 16
     seed = ((y % period) * period + (x % period)) + offset
     if seed == 0:
@@ -33,16 +51,37 @@ def cell_seed(x, y, offset):
 
 
 @njit
-def poisson(lambda_val):
+def bounded_poisson(lambda_val):
+    """
+    Generate a value following a poisson distribution, bounded to avoid outliers from affecting the result
+    too much
+
+    :param lambda_val: the lambda of the poisson distribution
+    :return: the generated value
+    """
     x = np.random.poisson(lambda_val)
     if x > 10000 * lambda_val:
         x = 10000 * lambda_val
     return x
 
 
-# Render one pixel in the pixel-wise algorithm
 @njit
-def render_pixel(chan_in, y_out, x_out, offset, x_gaussian_list, y_gaussian_list):
+def render_pixel(chan_in, y_out, x_out, seed_offset, x_gaussian_list, y_gaussian_list, width_in, height_in):
+    """
+    Compute the grey value for a pixel of the output image in one color channel
+
+    :param chan_in: the color channel of the input image
+    :param y_out: the y coordinate of the output pixel
+    :param x_out: the x coordinate of the output pixel
+    :param seed_offset: random offset used to compute a cell's seed
+    :param x_gaussian_list: list of n_monte_carlo values following a gaussian distribution,
+        used to offset the input pixel along the x-axis
+    :param y_gaussian_list: list of n_monte_carlo values following a gaussian distribution,
+        used to offset the input pixel along the y-axis
+    :param width_in: width of the input image
+    :param height_in: height of the input image
+    :return: the normalized grey value of the pixel at this color channel
+    """
     normal_quantile = 3.0902
     max_radius = mu_r
     ag = 1 / math.ceil(1 / mu_r)
@@ -60,31 +99,33 @@ def render_pixel(chan_in, y_out, x_out, offset, x_gaussian_list, y_gaussian_list
         max_radius = log_normal_quantile
 
     for i in range(n_monte_carlo):
+        # offset the input pixel using a gaussian distribution
         x_gaussian = x_in + sigma_filter * x_gaussian_list[i]
         y_gaussian = y_in + sigma_filter * y_gaussian_list[i]
 
+        # compute the cell coordinates to which the offset pixel belongs
         min_x = int((x_gaussian - max_radius) / ag)
         max_x = int((x_gaussian + max_radius) / ag)
         min_y = int((y_gaussian - max_radius) / ag)
         max_y = int((y_gaussian + max_radius) / ag)
 
         pt_covered = False
-        for ncx in range(min_x, max_x + 1):
+        for nc_x in range(min_x, max_x + 1):
             if pt_covered:
                 break
-            for ncy in range(min_y, max_y + 1):
+            for nc_y in range(min_y, max_y + 1):
                 if pt_covered:
                     break
-                cell_corner_x = ag * ncx
-                cell_corner_y = ag * ncy
+                cell_corner_x = ag * nc_x
+                cell_corner_y = ag * nc_y
 
-                seed = cell_seed(ncx, ncy, offset)
+                seed = cell_seed(nc_x, nc_y, seed_offset)
                 np.random.seed(seed)
 
                 lambda_val = chan_in[min(max(int(cell_corner_y), 0), height_in - 1)][min(max(
                     int(cell_corner_x), 0), width_in - 1)]
 
-                n_cell = poisson(lambda_val)
+                n_cell = bounded_poisson(lambda_val)
 
                 for k in range(n_cell):
                     x_centre_grain = cell_corner_x + ag * np.random.uniform()
@@ -108,7 +149,17 @@ def render_pixel(chan_in, y_out, x_out, offset, x_gaussian_list, y_gaussian_list
 
 # Pixel-wise film grain rendering algorithm
 @njit(parallel=True)
-def film_grain_rendering_pixel_wise(chan_in, grain_seed, progress_proxy):
+def film_grain_rendering_pixel_wise(chan_in, seed_offset, progress_proxy, width_in, height_in):
+    """
+    Computes the output image on one color channel
+
+    :param chan_in: the input color channel
+    :param seed_offset: a random offset used to compute the seed of the grain amount
+    :param progress_proxy: the progress bar of the program execution
+    :param width_in: the width of the input image
+    :param height_in: the height of the input image
+    :return: the color channel of the output image
+    """
     x_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
     y_gaussian_list = np.random.normal(0.0, sigma_filter, n_monte_carlo)
 
@@ -116,7 +167,7 @@ def film_grain_rendering_pixel_wise(chan_in, grain_seed, progress_proxy):
 
     for i in prange(chan_out.shape[0]):
         for j in prange(chan_out.shape[1]):
-            pix = render_pixel(chan_in, i, j, grain_seed, x_gaussian_list, y_gaussian_list)
+            pix = render_pixel(chan_in, i, j, seed_offset, x_gaussian_list, y_gaussian_list, width_in, height_in)
             chan_out[i, j] = pix
         progress_proxy.update(1)
 
@@ -124,15 +175,22 @@ def film_grain_rendering_pixel_wise(chan_in, grain_seed, progress_proxy):
 
 
 def grain_rendering(img_in):
+    """
+    Renders the grain on an input image
+
+    :param img_in: the image on which to render grain
+    :return: the image with grain rendered
+    """
     width_in = img_in.shape[0]
     height_in = img_in.shape[1]
 
     ag = 1 / math.ceil(1 / mu_r)
-    possible_values = np.arange(MAX_GREY_LEVEL) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
+    possible_values = np.arange(MAX_INTENSITY) / (MAX_INTENSITY + EPSILON_INTENSITY)
     lambdas = -(ag ** 2 / (np.pi * (mu_r ** 2 + sigma_r ** 2))) * np.log(1.0 - possible_values)
 
     start = time.time()
-    img_lambda = np.take(lambdas, ((img_in.astype(float) / (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)) * MAX_GREY_LEVEL).astype(int))
+    # Pre-compute the lambda of the poisson distribution at every pixel
+    img_lambda = np.take(lambdas, ((img_in.astype(float) / (MAX_INTENSITY + EPSILON_INTENSITY)) * MAX_INTENSITY).astype(int))
     end = time.time()
     print(f"preprocess time {end-start}")
 
@@ -143,13 +201,13 @@ def grain_rendering(img_in):
     img_in_temp = np.zeros((2, 2, 3))[:, :, 0]  # cannot remove slicing or runs much slower at start of color channel 0
     # trigger function compilation
     with ProgressBar(total=2) as progress:
-        film_grain_rendering_pixel_wise(img_in_temp, random.randint(0, 1000), progress)
+        film_grain_rendering_pixel_wise(img_in_temp, random.randint(0, 1000), progress, width_in, height_in)
 
     # Carry out film grain synthesis
-    img_out = np.zeros((height_in, width_in, MAX_CHANNELS), dtype=np.uint8)
+    img_out = np.zeros((height_in, width_in, NUM_CHANNELS), dtype=np.uint8)
     # Time and carry out grain rendering
     start = time.time()
-    for colourChannel in range(MAX_CHANNELS):
+    for colourChannel in range(NUM_CHANNELS):
         print("_____________________")
         print("Starting colour channel", colourChannel)
         print("_____________________")
@@ -158,8 +216,8 @@ def grain_rendering(img_in):
         # Carry out film grain synthesis
         img_out_temp = []
         with ProgressBar(total=img_in.shape[0]) as progress:
-            img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, random.randint(0, 1000), progress)
-        img_out_temp *= (MAX_GREY_LEVEL + EPSILON_GREY_LEVEL)
+            img_out_temp = film_grain_rendering_pixel_wise(img_in_temp, random.randint(0, 1000), progress, width_in, height_in)
+        img_out_temp *= (MAX_INTENSITY + EPSILON_INTENSITY)
         img_out[:, :, colourChannel] = img_out_temp
 
     end = time.time()
@@ -170,4 +228,10 @@ def grain_rendering(img_in):
 
 
 def grain_interface(img_in):
-    grain_rendering(img_in)
+    """
+    Simple interface function used to call the grain rendering algorithm from other files
+
+    :param img_in: the image on which to render grain
+    :return: the image with grain rendered
+    """
+    return grain_rendering(img_in)
