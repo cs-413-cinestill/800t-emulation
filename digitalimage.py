@@ -1,3 +1,9 @@
+"""
+Digital Image class container
+@author: Alexandre Riou
+@date: May 2024
+"""
+
 import rawpy
 import numpy as np
 from rawpy._rawpy import FBDDNoiseReductionMode, ColorSpace

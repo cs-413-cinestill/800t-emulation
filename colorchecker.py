@@ -1,3 +1,10 @@
+"""
+Contains all classes related to Color checker creation and reading
+@author: Alexandre Riou
+@date: May 2024
+"""
+
+
 from __future__ import annotations
 
 import pickle

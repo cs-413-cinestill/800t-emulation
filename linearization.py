@@ -1,3 +1,10 @@
+"""
+Linearization Function class holder
+@author: Alexandre Riou
+@date: May 2024
+"""
+
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 

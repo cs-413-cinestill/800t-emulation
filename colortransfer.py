@@ -1,3 +1,10 @@
+"""
+Color Transfer class container
+@author: Alexandre Riou
+@date: May 2024
+"""
+
+
 from __future__ import annotations
 
 import numpy as np

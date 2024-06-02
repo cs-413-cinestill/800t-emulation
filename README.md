@@ -10,6 +10,14 @@ Coded for Python 3.10+
 
 The grain rendering part of the program is inspired by http://www.ipol.im/pub/art/2017/192/
 
-To get the same execution at the one of the demo, do:
+Although our grain rendering implementation provides a cross platform solution, you may wish to run the original
+cpp version for performance reasons.
+To get the same execution at the one of the demo, run:
 
+```
 ./film_grain_rendering_main input_image output_image -r 0.150 -sigmaR 0 -NmonteCarlo 100 -algorithmID 0 -color 1
+```
+
+We also built a test implementation of the grain simulation for cuda with pycuda. Checkout the
+[grain detection pycuda test](https://github.com/cs-413-cinestill/800t-emulation/tree/grain-detection-pycuda-test)
+branch.

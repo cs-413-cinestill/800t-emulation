@@ -1,3 +1,9 @@
+"""
+Utility Function holder
+@author: Alexandre Riou
+@date: May 2024
+"""
+
 import numpy as np
 
 
