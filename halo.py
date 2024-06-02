@@ -1,4 +1,4 @@
-import rawpy
+#import rawpy
 import numpy as np
 import cv2
 
@@ -20,19 +20,19 @@ def get_dominant_color(img, mask):
     mean_color = cv2.mean(masked_img, mask=mask)[:3]
     return np.array(mean_color)
 
-def add_halation(input_path, output_path):
+def add_halation(input):
     # Load the .RW2 image
-    raw = rawpy.imread(input_path)
-    custom_wb = raw.camera_whitebalance
+    #raw = rawpy.imread(input)
+    #custom_wb = raw.camera_whitebalance
 
     # Post-process the RAW image with custom white balance
-    rgb = raw.postprocess(output_bps=16, user_wb=custom_wb)
+    #rgb = raw.postprocess(output_bps=16, user_wb=custom_wb)
 
     # Convert to float32 numpy array for better precision during processing
-    img = rgb.astype(np.float32) / 65535.0
+    #img = rgb.astype(np.float32) / 65535.0
 
     # Convert to grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    gray = cv2.cvtColor(input, cv2.COLOR_RGB2GRAY)
 
     # Apply a threshold to get bright areas
     _, bright_mask = cv2.threshold(gray, 0.9999, 1.0, cv2.THRESH_BINARY)
@@ -67,30 +67,27 @@ def add_halation(input_path, output_path):
     glow = cv2.GaussianBlur(mask_dilated_combined, (0, 0), sigmaX=10, sigmaY=10)
 
 
-    dominant_color = get_dominant_color(img, mask_dilated_combined)
+    dominant_color = get_dominant_color(input, mask_dilated_combined)
 
     # Adjust the tint color based on the dominant color
-    red_tint = np.array([0, 0.15, 0.6])  # Base red-orange color for halation
+    red_tint = np.array([0.6, 0.15, 0])  # Base red-orange color for halation
     adjusted_tint = 0.5 * red_tint + 0.5 * (dominant_color / 255.0)  # Blend with the dominant color
 
     # Create the glow effect with the adjusted tint color
     glow_rgb = cv2.merge([glow * adjusted_tint[0], glow * adjusted_tint[1], glow * adjusted_tint[2]])
 
     # Amplify the brightness of the bright areas
-    bright_areas = img * mask[..., np.newaxis]
+    bright_areas = input * mask[..., np.newaxis]
     bright_areas = np.clip(bright_areas * 2.0, 0, 1)  # Increase brightness
 
     # Combine the amplified bright areas with the glow effect
     enhanced_glow_rgb = np.clip(bright_areas + glow_rgb, 0, 1)
 
     # Combine the original image with the enhanced bright areas and glow effect
-    halation = np.clip(img + enhanced_glow_rgb, 0, 1)
-
-    # Convert the final image to uint8 format for saving
-    halation = (halation * 255).astype(np.uint8)
+    halation = np.clip(input + enhanced_glow_rgb, 0, 1)
 
     # Save the output image
-    cv2.imwrite(output_path, halation)
+    return halation
 
 # Example usage
-add_halation('raw.RW2', 'output.jpg')
+#add_halation('raw.RW2', 'output.jpg')
