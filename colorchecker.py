@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import pickle
 from dataclasses import dataclass, field
-from typing import Tuple, Callable
+from typing import Tuple, Callable, List
 from functools import reduce, cached_property
 import numpy as np
 import cv2
+from pathlib import Path
 # matplotlib libraries
 from matplotlib.backend_bases import MouseEvent
 from IPython.display import display
@@ -118,6 +119,12 @@ class ColorChecker:
         pattern = self.np_array
         return ColorCheckerLocation((0, 0), (pattern.shape[1], 0), (0, pattern.shape[0]),
                                     (pattern.shape[1], pattern.shape[0]))
+
+    def __eq__(self, other):
+        return self.num_cols == other.num_cols \
+            and self.num_rows == other.num_rows \
+            and self.patch_size == other.patch_size \
+            and self.inter_patch_distance == other.inter_patch_distance
 
 
 @dataclass
@@ -342,7 +349,7 @@ class ColorCheckerReading:
     @staticmethod
     def load(path, image: np.ndarray) -> ColorCheckerReading:
         """
-        Load the Color Checker reading, and add back the image that was omitted during saving
+        Load the Color Checker reading, and add back the image that was omitted during saving.
         :param path: the path of the file
         :param image: image used for patch extraction
         :return:a new ColorCheckerReading object
@@ -356,10 +363,41 @@ class ColorCheckerReading:
         """
         Save the Color Checker reading under a light form, without the attached image.
         Use .ccr files as convention
-        :param path:
-        :return:
+        :param path: the path to which we save. Directory needs to exist.
         """
         with open(path, 'wb') as f:
             pickle.dump(self._light_copy(self), f)
 
-    # todo add combine readings
+    @staticmethod
+    def load_if_exists(path, image: np.ndarray, color_checker: ColorChecker) -> ColorCheckerReading:
+        """
+        Loads a Color Checker reading from path if it exists (and appends the image omitted during saving),
+        otherwise creates a new one with the provided image and ColorChecker.
+        :param path: the path from which we are trying to load the color checker.
+        :param image: image we are extracting color checker patch information from
+        :param color_checker: color checker pattern we are reading in the image
+        :return: a new ColorCheckerReading object
+        """
+        return ColorCheckerReading.load(path, image)\
+            if Path(path).is_file() else ColorCheckerReading(color_checker, image)
+
+    @staticmethod
+    def combine(readings: List[ColorCheckerReading]) -> ColorCheckerReading:
+        """
+        Create a new image-less reading from a list of readings. The readings are stacked vertically
+        :param readings: a list of readings
+        :return: a new combiner ColorCheckerReading, without a link to an image
+        """
+        for reading in readings:
+            assert reading.color_checker == readings[0].color_checker
+        color_checker = readings[0].color_checker
+        num_readings = len(readings)
+        combined_Color_Checker = ColorChecker(color_checker.num_rows*num_readings,
+                                              color_checker.num_cols,
+                                              color_checker.patch_size,
+                                              color_checker.inter_patch_distance)
+        return ColorCheckerReading(
+            combined_Color_Checker,
+            None,
+            patch_data=np.concatenate(list(map(lambda reading: reading.patch_data, readings)))
+        )

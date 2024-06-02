@@ -4,6 +4,7 @@ from rawpy._rawpy import FBDDNoiseReductionMode, ColorSpace
 from PIL import Image
 import io
 
+
 class DigitalImage:
     """
     A digital image container for 12 bit RW2 panasonic raw files
@@ -26,8 +27,9 @@ class DigitalImage:
                 output_color=ColorSpace.raw,
                 output_bps=16,
                 no_auto_scale=False, no_auto_bright=True, exp_shift=exposure,
+                user_flip=0,
                 gamma=(1, 1),
-                user_wb=white,use_camera_wb=False, use_auto_wb=False) / (2**16)
+                user_wb=white, use_camera_wb=False, use_auto_wb=False) / (2 ** 16)
             width = self.raw.shape[1]
             height = self.raw.shape[0]
 

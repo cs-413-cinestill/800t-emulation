@@ -83,7 +83,7 @@ class LinearizeFunction(ABC):
         plt.plot(self.source_patches, self.apply(self.source_patches))
         plt.xlabel("source patch luminosity space")
         plt.ylabel("measured luminosity")
-        plt.legend(['Target patch Luminosity', 'Luminosity of source patches after mapping'])  # todo change
+        plt.legend(['Target patch Luminosity', 'Luminosity of source patches after mapping'])
 
     @staticmethod
     def load(path: str) -> 'LinearizeFunction':
