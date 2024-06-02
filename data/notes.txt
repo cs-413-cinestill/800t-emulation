@@ -1,1 +1,0 @@
-try to extract the non linearity of the tif by comparing to the raw sensor
