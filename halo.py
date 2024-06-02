@@ -70,7 +70,7 @@ def add_halation(input):
     dominant_color = get_dominant_color(input, mask_dilated_combined)
 
     # Adjust the tint color based on the dominant color
-    red_tint = np.array([0, 0.15, 0.6])  # Base red-orange color for halation
+    red_tint = np.array([0.6, 0.15, 0])  # Base red-orange color for halation
     adjusted_tint = 0.5 * red_tint + 0.5 * (dominant_color / 255.0)  # Blend with the dominant color
 
     # Create the glow effect with the adjusted tint color
@@ -85,9 +85,6 @@ def add_halation(input):
 
     # Combine the original image with the enhanced bright areas and glow effect
     halation = np.clip(input + enhanced_glow_rgb, 0, 1)
-
-    # Convert the final image to uint8 format for saving
-    halation = (halation * 255).astype(np.uint8)
 
     # Save the output image
     return halation
